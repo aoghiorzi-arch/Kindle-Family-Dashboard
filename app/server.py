@@ -4,8 +4,8 @@ from http.cookies import SimpleCookie
 from urllib.parse import urlparse
 from pathlib import Path
 from datetime import date
-import json, re, sys
-from . import store, auth
+import json, re, sys, time
+from . import store, auth, weather
 from .render import png_bytes
 
 ROOT = Path(__file__).resolve().parent
@@ -43,7 +43,7 @@ def session_cookie(token):
 def clear_cookie():
  return f'{COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict'
 
-def make_handler(db_path, limiter):
+def make_handler(db_path, limiter, provider):
  class Handler(BaseHTTPRequestHandler):
   server_version = 'FamilyHub'
 
@@ -93,7 +93,9 @@ def make_handler(db_path, limiter):
     if user is None: return self.send_error_json(401, 'Sign in required')
     if path == '/api/state': return self.send_json(200, self.state(conn, user))
     if path == '/frame.png':
-     frame = store.snapshot(conn, user['household_id'], date.today().isoformat(), FIXTURE)
+     hh, today = user['household_id'], date.today().isoformat()
+     block = weather.frame_weather(conn, hh, provider, int(time.time()), today)
+     frame = store.snapshot(conn, hh, today, FIXTURE, block)
      return self.send_bytes(200, png_bytes(frame), 'image/png')
     return self.send_bytes(404, b'Not found', 'text/plain; charset=utf-8')
    finally:
@@ -168,8 +170,9 @@ def make_handler(db_path, limiter):
 
  return Handler
 
-def make_server(db_path, port=8765, host='127.0.0.1'):
- return ThreadingHTTPServer((host, port), make_handler(db_path, auth.LoginLimiter()))
+def make_server(db_path, port=8765, host='127.0.0.1', provider=None):
+ provider = provider or weather.FakeProvider(FIXTURE['weather'])
+ return ThreadingHTTPServer((host, port), make_handler(db_path, auth.LoginLimiter(), provider))
 
 def main():
  db_path = store.default_db_path()

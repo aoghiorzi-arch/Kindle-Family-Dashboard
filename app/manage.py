@@ -2,9 +2,11 @@
 
   python3 -m app.manage add-user USERNAME   # creates the household on first use
   python3 -m app.manage seed-demo           # fills an empty household with the sample items
+  python3 -m app.manage set-location LAT LON TIMEZONE   # e.g. 51.5074 -0.1278 Europe/London
 """
 from pathlib import Path
 import getpass, json, sys
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from . import store, auth
 
 def add_user(username):
@@ -26,6 +28,27 @@ def add_user(username):
   conn.close()
  print(f'Added {username}.')
 
+def set_location(lat_text, lon_text, tz):
+ try:
+  lat, lon = float(lat_text), float(lon_text)
+ except ValueError:
+  sys.exit('Latitude and longitude must be numbers')
+ if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+  sys.exit('Latitude must be -90 to 90 and longitude -180 to 180')
+ try:
+  ZoneInfo(tz)
+ except (ZoneInfoNotFoundError, ValueError):
+  sys.exit(f'Unknown time zone: {tz}')
+ store.init_db(store.default_db_path())
+ conn = store.connect(store.default_db_path())
+ try:
+  household = store.first_household_id(conn)
+  if household is None: sys.exit('Add a user first: python3 -m app.manage add-user USERNAME')
+  store.set_location(conn, household, lat, lon, tz)
+ finally:
+  conn.close()
+ print(f'Location set to {lat}, {lon} ({tz}).')
+
 def seed_demo():
  store.init_db(store.default_db_path())
  conn = store.connect(store.default_db_path())
@@ -43,6 +66,7 @@ def seed_demo():
 
 if __name__ == '__main__':
  commands = {'add-user': lambda: add_user(sys.argv[2]) if len(sys.argv) == 3 else sys.exit(__doc__),
-             'seed-demo': seed_demo}
+             'seed-demo': seed_demo,
+             'set-location': lambda: set_location(*sys.argv[2:5]) if len(sys.argv) == 5 else sys.exit(__doc__)}
  if len(sys.argv) < 2 or sys.argv[1] not in commands: sys.exit(__doc__)
  commands[sys.argv[1]]()

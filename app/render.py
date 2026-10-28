@@ -5,6 +5,7 @@ from datetime import datetime
 import hashlib, io, os, textwrap
 
 W,H = 600,800
+STALE_MINUTES = 60  # weather older than this shows its age on the display
 DPI = 167  # Kindle Touch D01200 pixel density; lets a print at 100% show true physical size
 BG='#FFFFFF'; BLACK='#161616'; GRAY='#575757'; LINE='#A0A0A0'
 # Bundled OFL fonts (see app/fonts/OFL-Lato-NotoSerif.txt) keep renders reproducible across machines.
@@ -45,6 +46,10 @@ def render(data):
  d.text((right-tw,102),temp,font=tfont,fill=BLACK)
  cond,cf=fit(d,weather.get('condition','Weather unavailable'),220,17,'sans')
  bbox=d.textbbox((0,0),cond,font=cf);d.text((right-(bbox[2]-bbox[0]),171),cond,font=cf,fill=GRAY)
+ age=weather.get('age_minutes')
+ if age is not None and age>=STALE_MINUTES: # visible hint that the forecast is old
+  stale=f'Updated {age//60} h ago' if age<48*60 else f'Updated {age//1440} days ago'
+  txt_right(195,stale,15,'sans',GRAY)
  rule(226)
  txt(left,245,'COMING UP',18,'bold',GRAY)
  events=list(data.get('events',[]))[:3]

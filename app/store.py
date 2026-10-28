@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS events (
  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
  created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS locations (
+ household_id INTEGER PRIMARY KEY REFERENCES households(id) ON DELETE CASCADE,
+ lat REAL NOT NULL,
+ lon REAL NOT NULL,
+ tz TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS weather_cache (
+ household_id INTEGER PRIMARY KEY REFERENCES households(id) ON DELETE CASCADE,
+ fetched_at INTEGER NOT NULL,
+ payload TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS shopping_household ON shopping(household_id);
 CREATE INDEX IF NOT EXISTS events_household ON events(household_id);
 """
@@ -124,11 +135,23 @@ def add_event(conn, household_id, user_id, title, when, private):
 def delete_event(conn, household_id, item_id):
  return conn.execute('DELETE FROM events WHERE id=? AND household_id=?', (item_id, household_id)).rowcount == 1
 
-def snapshot(conn, household_id, today, fixture):
- """Renderer input for one household. Weather and quote still come from the fixture until adapters exist."""
+def set_location(conn, household_id, lat, lon, tz):
+ conn.execute('INSERT OR REPLACE INTO locations(household_id,lat,lon,tz) VALUES(?,?,?,?)', (household_id, lat, lon, tz))
+
+def get_location(conn, household_id):
+ return conn.execute('SELECT lat,lon,tz FROM locations WHERE household_id=?', (household_id,)).fetchone()
+
+def get_weather(conn, household_id):
+ return conn.execute('SELECT fetched_at,payload FROM weather_cache WHERE household_id=?', (household_id,)).fetchone()
+
+def put_weather(conn, household_id, fetched_at, payload):
+ conn.execute('INSERT OR REPLACE INTO weather_cache(household_id,fetched_at,payload) VALUES(?,?,?)', (household_id, fetched_at, payload))
+
+def snapshot(conn, household_id, today, fixture, weather):
+ """Renderer input for one household. The quote still comes from the fixture until a content adapter exists."""
  return {
   'date': today,
-  'weather': fixture.get('weather', {}),
+  'weather': weather,
   'quote': fixture.get('quote', {}),
   'events': [{'title': r['title'], 'time': r['time'], 'private': bool(r['private'])} for r in list_events(conn, household_id)],
   'shopping': [{'title': r['title'], 'done': bool(r['done'])} for r in list_shopping(conn, household_id)],

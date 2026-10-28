@@ -13,6 +13,7 @@ python3 -m pip install -r requirements.txt
 python3 -m app.manage add-user sam
 python3 -m app.manage add-user jo
 python3 -m app.manage seed-demo        # optional: sample shopping and events
+python3 -m app.manage set-location 51.5074 -0.1278 Europe/London   # for a computed sunset
 
 python3 -m app.server
 ```
@@ -49,7 +50,10 @@ python3 -m unittest discover -s tests -v
 ## Scope
 - Today renderer: 600×800 PNG, deterministic for the same input. Fonts are bundled in `app/fonts/` (Lato and Noto Serif, SIL Open Font License; see `app/fonts/OFL-Lato-NotoSerif.txt`).
 - Family Hub: SQLite storage, sign-in, one household with two member accounts, shopping (add, mark got, remove), events (add with optional time and private flag, remove).
-- Weather, sunset and the quote are still **fixed fixture values** from `app/seed.json`. Live adapters come later.
+- Weather: server-side adapter with a 30-minute cache. The demo uses `FakeProvider` (fixed values from `app/seed.json`) only. Displays never call a weather service. If a refresh fails, the last good forecast is kept and shows "Updated N h ago" once it is over an hour old.
+- Sunset: computed from the household location and time zone when set (`set-location`). Without a location, the fixture value is used.
+- The quote is still a fixture value from `app/seed.json`.
+- A real weather provider makes external network calls and needs separate approval before it is added.
 - Not included: calendar providers, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
 
 For execution priorities and gates see `MASTER_PLAN_V2.md`. The read-only hardware checklist is in `docs/HARDWARE_AUDIT_CHECKLIST.md`. The original detailed plan is preserved in `docs/ORIGINAL_MASTER_PLAN.md`.
