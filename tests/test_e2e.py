@@ -118,7 +118,7 @@ class PhoneEditTest(Served):
 
 class BrowserEndToEndTest(Served):
  """Runs the browser scripts against one server: the phone edit path, then the admin settings path."""
- SCRIPTS = ['phone_edit.js', 'admin_calendar.js']
+ SCRIPTS = ['phone_edit.js', 'admin_calendar.js', 'preview_refresh.js']
 
  def run_script(self, name, env):
   result = subprocess.run(['node', str(ROOT/'tests'/'e2e'/name)], env=env, capture_output=True, text=True, timeout=180)
@@ -145,3 +145,4 @@ class BrowserEndToEndTest(Served):
 
 if __name__ == '__main__':
  unittest.main()
+

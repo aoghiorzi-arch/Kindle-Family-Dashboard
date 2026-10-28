@@ -3,9 +3,8 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse
 from pathlib import Path
-import json, re, sys, time
-from . import store, auth, weather, validate, ics, feeds
-from .render import png_bytes
+import json, re, sys, time, threading
+from . import store, auth, weather, validate, ics, feeds, frames
 
 ROOT = Path(__file__).resolve().parent
 FIXTURE = json.loads((ROOT/'seed.json').read_text())
@@ -20,7 +19,7 @@ FEED_ROUTE = re.compile(r'^/api/feeds/(\d+)/(refresh|delete)$')
 ADMIN_ONLY = ('/api/members', '/api/location', '/api/tokens')
 CALENDAR_LIMIT = 300_000  # bytes; a family calendar export is much larger than other requests
 SECURITY_HEADERS = {
- 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+ 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
  'X-Content-Type-Options': 'nosniff',
  'X-Frame-Options': 'DENY',
  'Referrer-Policy': 'no-referrer',
@@ -33,7 +32,7 @@ def session_cookie(token):
 def clear_cookie():
  return f'{COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict'
 
-def make_handler(db_path, limiter, provider, fetcher):
+def make_handler(db_path, limiter, provider, fetcher, frame_service):
  class Handler(BaseHTTPRequestHandler):
   server_version = 'FamilyHub'
 
@@ -83,9 +82,13 @@ def make_handler(db_path, limiter, provider, fetcher):
     if path == '/api/state': return self.send_json(200, self.state(conn, user))
     if path == '/frame.png':
      hh = user['household_id']
-     today = store.household_today(conn, hh)
-     block = weather.frame_weather(conn, hh, provider, int(time.time()), today)
-     return self.send_bytes(200, png_bytes(store.snapshot(conn, hh, today, block)), 'image/png')
+     frame = frame_service.refresh(conn, hh)
+     if frame is None: return self.send_error_json(503, 'Preview unavailable. Please try again shortly.')
+     body, digest, stale = frame
+     extra = {'ETag': f'"{digest}"', 'X-Frame-Stale': 'true' if stale else 'false'}
+     if self.headers.get('If-None-Match') == extra['ETag']:
+      return self.send_bytes(304, b'', 'image/png', extra)
+     return self.send_bytes(200, body, 'image/png', extra)
     return self.send_bytes(404, b'Not found', 'text/plain; charset=utf-8')
    finally:
     conn.close()
@@ -236,15 +239,28 @@ def make_handler(db_path, limiter, provider, fetcher):
  return Handler
 
 class QuietServer(ThreadingHTTPServer):
+ def serve_forever(self, poll_interval=0.5):
+  stop = threading.Event()
+  worker = threading.Thread(target=self.frame_service.run, args=(stop,), daemon=True)
+  worker.start()
+  try:
+   super().serve_forever(poll_interval)
+  finally:
+   stop.set()
+   worker.join()
+
  def handle_error(self, request, client_address):
   # A browser cancelling an image request mid-download is normal; do not print a traceback for it.
   if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)): return
   super().handle_error(request, client_address)
 
-def make_server(db_path, port=8765, host='127.0.0.1', provider=None, fetcher=None):
+def make_server(db_path, port=8765, host='127.0.0.1', provider=None, fetcher=None, clock=time.time):
  provider = provider or weather.FakeProvider(FIXTURE['weather'])
  fetcher = fetcher or feeds.fetch_https
- return QuietServer((host, port), make_handler(db_path, auth.LoginLimiter(), provider, fetcher))
+ frame_service = frames.FrameService(db_path, provider, clock)
+ server = QuietServer((host, port), make_handler(db_path, auth.LoginLimiter(), provider, fetcher, frame_service))
+ server.frame_service = frame_service
+ return server
 
 def main():
  db_path = store.default_db_path()
@@ -256,3 +272,4 @@ def main():
 
 if __name__ == '__main__':
  main()
+

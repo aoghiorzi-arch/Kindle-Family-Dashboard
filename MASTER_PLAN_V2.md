@@ -1,7 +1,7 @@
 # Kindle Family Display — Lean Execution Plan (v2)
 
-**Date:** 28 October 2026  
-**Status:** Safe local software prototype started. **No authority** to modify Kindle firmware, install device-side software, connect to the physical device, deploy publicly or access production accounts.  
+**Date:** 28 October 2026
+**Status:** Persistent local Family Hub implemented; automatic frame lifecycle added. Verification evidence and remaining work: [`docs/PROGRESS.md`](docs/PROGRESS.md). **No authority** to modify Kindle firmware, install device-side software, connect to the physical device, deploy publicly or access production accounts.
 **Original specification:** [`docs/ORIGINAL_MASTER_PLAN.md`](docs/ORIGINAL_MASTER_PLAN.md) remains the product requirements/reference. Where these plans differ in *execution order or scope*, this v2 is the proposed working roadmap; it does **not** weaken the original security, hardware-safety or approval gates.
 
 ## Product goal
@@ -57,10 +57,20 @@ Birthdays, chores, school dates, smart layouts and second display support, based
 - Stale data is distinguished from offline connectivity.
 - Original document's consent rules, no-public-deployment rule, battery precautions, licensing requirements and tests remain mandatory.
 
-## Current prototype status (this delivery)
-- Local Python/Pillow renderer, editable local mock web page, sample fixtures and unit tests.
-- **Not included:** persistent DB, authentication, external weather/calendar integrations, device bridge, hardware assessment, Kindle touch support, real-time polling, production hosting.
-- Changes in local demo reset on server restart, by design.
+## Current implementation status — 28 October 2026
+- SQLite persistence, password sign-in, household isolation, admin/member roles, CSRF protection and local mobile editing are implemented.
+- Shopping add/check/remove, manual events, private-event masking, calendar paste import and protected HTTPS feed retrieval are implemented. Recurring events and automatic feed fetching remain deferred.
+- Sunset calculation, cached fake weather, daily verses, household settings and scoped/revocable shopping Shortcuts tokens are implemented.
+- Today renderer produces a deterministic 600×800 PNG. A local background worker checks each household every minute, including date/event/verse/sunset rollover and weather TTL refresh. No browser or edits are needed for these checks while the server runs.
+- Verified PNGs are published atomically beside the database, with content hashes. Unchanged images are not rewritten. Render/publication failures preserve the last valid household image across restarts.
+- Authenticated browser previews check every minute while visible and on reconnect/return to the tab. Unchanged hashes receive 304 responses; failed updates keep the displayed image. Draft form values are preserved.
+- No live weather provider, calendar recurrence expansion, automatic feed downloads, encrypted feed addresses, Kindle bridge, HTTPS or production hosting is included.
+- Original M0–M8 gates remain in force. This is a partial implementation of the broader product, not a declaration that every original milestone has passed.
 
-## Next explicitly safe task
-Refine Today layout based on a 6-inch print/physical-size review; then implement the authenticated persistent Family Hub locally. Run the read-only Kindle audit in parallel. Seek separate permission before any physical device changes.
+## Next work
+1. Review the Today screen at physical six-inch size and record readability/overflow findings.
+2. Finish calendar recurrence and controlled automatic feed refresh; protect stored feed addresses before deployment.
+3. Review multi-user concurrency, Shortcut retry/idempotency, backups/restore and deployment security.
+4. Complete the user-led hardware audit. Obtain separate explicit approval before device connection/modification or production deployment.
+
+See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the current checklist and [`docs/VERIFICATION_2026-10-28.md`](docs/VERIFICATION_2026-10-28.md) for this software milestone's evidence.
