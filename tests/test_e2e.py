@@ -108,21 +108,32 @@ class PhoneEditTest(Served):
  def test_preview_needs_sign_in(self):
   self.assertEqual(self.request('GET', '/frame.png')[0], 401)
 
-class BrowserPhoneEditTest(Served):
- def test_phone_ui_edits_update_the_preview(self):
+class BrowserEndToEndTest(Served):
+ """Runs the browser scripts against one server: the phone edit path, then the admin settings path."""
+ SCRIPTS = ['phone_edit.js', 'admin_calendar.js']
+
+ def run_script(self, name, env):
+  result = subprocess.run(['node', str(ROOT/'tests'/'e2e'/name)], env=env, capture_output=True, text=True, timeout=180)
+  return result
+
+ def test_browser_paths_through_the_real_pages(self):
   if shutil.which('node') is None:
    self.skipTest('node is not installed')
   self.serve()
+  conn = store.connect(self.db)
+  store.set_location(conn, self.hh, 51.5074, -0.1278, 'Europe/London')
+  conn.close()
   env = {**os.environ, 'E2E_BASE': f'http://127.0.0.1:{self.port}', 'E2E_USER': 'sam', 'E2E_PASS': PASSWORD}
   npm = shutil.which('npm')
   if npm:
    global_root = subprocess.run([npm, 'root', '-g'], capture_output=True, text=True, timeout=30).stdout.strip()
    env['NODE_PATH'] = os.pathsep.join(filter(None, [global_root, env.get('NODE_PATH', '')]))
-  result = subprocess.run(['node', str(ROOT/'tests'/'e2e'/'phone_edit.js')], env=env,
-   capture_output=True, text=True, timeout=180)
-  if result.returncode == 77:
-   self.skipTest('playwright is not installed')
-  self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+  for script in self.SCRIPTS:
+   with self.subTest(script=script):
+    result = self.run_script(script, env)
+    if result.returncode == 77:
+     self.skipTest('playwright is not installed')
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 if __name__ == '__main__':
  unittest.main()

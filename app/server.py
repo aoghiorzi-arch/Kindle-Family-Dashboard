@@ -211,9 +211,15 @@ def make_handler(db_path, limiter, provider):
 
  return Handler
 
+class QuietServer(ThreadingHTTPServer):
+ def handle_error(self, request, client_address):
+  # A browser cancelling an image request mid-download is normal; do not print a traceback for it.
+  if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)): return
+  super().handle_error(request, client_address)
+
 def make_server(db_path, port=8765, host='127.0.0.1', provider=None):
  provider = provider or weather.FakeProvider(FIXTURE['weather'])
- return ThreadingHTTPServer((host, port), make_handler(db_path, auth.LoginLimiter(), provider))
+ return QuietServer((host, port), make_handler(db_path, auth.LoginLimiter(), provider))
 
 def main():
  db_path = store.default_db_path()
