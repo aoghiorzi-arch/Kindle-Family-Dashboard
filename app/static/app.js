@@ -85,6 +85,7 @@ async function refresh() {
   if (isAdmin) {
     $('members').replaceChildren(...s.members.map(memberRow));
     $('tokens').replaceChildren(...s.tokens.map(tokenRow));
+    $('calendarStatus').textContent = s.calendar.events ? `${s.calendar.events} imported events in the calendar.` : 'No calendar imported.';
     if (s.location) {
       $('lat').value = s.location.lat;
       $('lon').value = s.location.lon;
@@ -164,6 +165,21 @@ $('tokenForm').addEventListener('submit', async e => {
     message('Token created. Copy it now.');
     await refresh();
   } catch (err) { handleError(err); }
+});
+
+$('calendarForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  try {
+    const j = await call('/api/calendar', {method: 'POST', body: {ics: $('ics').value}});
+    $('ics').value = '';
+    message(`Calendar imported: ${j.imported} events. ${j.skipped} recurring or unreadable entries skipped.`);
+    await refresh();
+  } catch (err) { handleError(err); }
+});
+
+$('calendarClear').addEventListener('submit', async e => {
+  e.preventDefault();
+  await act('/api/calendar/clear', {}, 'Imported calendar removed.');
 });
 
 refresh().catch(e => showLogin(e.status === 401 ? '' : e.message));

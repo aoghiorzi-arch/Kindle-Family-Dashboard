@@ -55,9 +55,10 @@ The end-to-end tests (`tests/test_e2e.py`) check that a phone edit changes the n
 - Weather: server-side adapter with a 30-minute cache. The demo uses `FakeProvider` (fixed values from `app/seed.json`) only. Displays never call a weather service. If a refresh fails, the last good forecast is kept and shows "Updated N h ago" once it is over an hour old.
 - Sunset: computed from the household location and time zone when set (`set-location`). Without a location, the fixture value is used.
 - Admin settings (admins only): add members with a role (member or admin), set the location for sunset, and create or revoke Shortcuts tokens. The first member of a household is an admin. Use `add-user NAME --admin` to add another admin from the command line.
+- Family calendar (admins only): paste an `.ics` export in Household settings. The server never fetches a URL. Only today's events are shown, in the household's time zone. Recurring events are skipped, and the import reports how many. Private events show as "Busy". Imported events can be removed at any time.
 - Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked.
 - Daily thought: a King James Version verse chosen by date (the same verse all day), bundled in `app/content.py`. No network calls. Check each verse against a printed Bible before it goes on a family display.
 - A real weather provider makes external network calls and needs separate approval before it is added.
-- Not included: calendar providers, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
+- Not included: calendar URL subscriptions (needs separate approval), recurring-event expansion, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
 
 For execution priorities and gates see `MASTER_PLAN_V2.md`. The read-only hardware checklist is in `docs/HARDWARE_AUDIT_CHECKLIST.md`. The original detailed plan is preserved in `docs/ORIGINAL_MASTER_PLAN.md`.

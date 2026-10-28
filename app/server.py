@@ -3,9 +3,8 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse
 from pathlib import Path
-from datetime import date
 import json, re, sys, time
-from . import store, auth, weather, validate
+from . import store, auth, weather, validate, ics
 from .render import png_bytes
 
 ROOT = Path(__file__).resolve().parent
@@ -18,6 +17,7 @@ SHORTCUT_SCOPE = 'shopping:add'  # the only scope a Shortcuts token can get
 ITEM_ROUTE = re.compile(r'^/api/(shopping|events)/(\d+)/(toggle|delete)$')
 TOKEN_REVOKE = re.compile(r'^/api/tokens/(\d+)/revoke$')
 ADMIN_ONLY = ('/api/members', '/api/location', '/api/tokens')
+CALENDAR_LIMIT = 300_000  # bytes; a family calendar export is much larger than other requests
 SECURITY_HEADERS = {
  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
  'X-Content-Type-Options': 'nosniff',
@@ -54,9 +54,9 @@ def make_handler(db_path, limiter, provider):
   def send_error_json(self, status, message):
    self.send_json(status, {'error': message})
 
-  def read_json(self):
+  def read_json(self, limit=4096):
    length = int(self.headers.get('Content-Length') or 0)
-   if not 0 <= length <= 4096: raise ValueError('Invalid body size')
+   if not 0 <= length <= limit: raise ValueError('Invalid body size')
    if length == 0: return {}
    payload = json.loads(self.rfile.read(length))
    if not isinstance(payload, dict): raise ValueError('Body must be a JSON object')
@@ -81,7 +81,8 @@ def make_handler(db_path, limiter, provider):
     if user is None: return self.send_error_json(401, 'Sign in required')
     if path == '/api/state': return self.send_json(200, self.state(conn, user))
     if path == '/frame.png':
-     hh, today = user['household_id'], date.today().isoformat()
+     hh = user['household_id']
+     today = store.household_today(conn, hh)
      block = weather.frame_weather(conn, hh, provider, int(time.time()), today)
      return self.send_bytes(200, png_bytes(store.snapshot(conn, hh, today, block)), 'image/png')
     return self.send_bytes(404, b'Not found', 'text/plain; charset=utf-8')
@@ -92,7 +93,7 @@ def make_handler(db_path, limiter, provider):
    path = urlparse(self.path).path
    conn = store.connect(db_path)
    try:
-    payload = self.read_json()
+    payload = self.read_json(CALENDAR_LIMIT if path.startswith('/api/calendar') else 4096)
     if path.startswith('/api/shortcut/'): return self.shortcut(conn, path, payload)
     if not self.same_origin(): return self.send_error_json(403, 'Cross-origin request refused')
     if path == '/api/login': return self.login(conn, payload)
@@ -101,7 +102,7 @@ def make_handler(db_path, limiter, provider):
     if self.headers.get('X-CSRF-Token') != user['csrf']:
      return self.send_error_json(403, 'Missing or invalid CSRF token')
     if path == '/api/logout': return self.logout(conn)
-    if path in ADMIN_ONLY or TOKEN_REVOKE.match(path):
+    if path in ADMIN_ONLY or path.startswith('/api/calendar') or TOKEN_REVOKE.match(path):
      if user['role'] != 'admin': return self.send_error_json(403, 'Admins only')
     return self.change(conn, user, path, payload)
    except ValueError as exc:
@@ -153,6 +154,7 @@ def make_handler(db_path, limiter, provider):
    if user['role'] == 'admin':
     loc = store.get_location(conn, hh)
     state['location'] = dict(loc) if loc else None
+    state['calendar'] = {'events': store.calendar_count(conn, hh)}
     state['tokens'] = [{'id': r['id'], 'name': r['name'], 'scopes': r['scopes'], 'created_at': r['created_at'],
      'last_used_at': r['last_used_at'], 'revoked': r['revoked_at'] is not None} for r in store.list_api_tokens(conn, hh)]
    return state
@@ -181,6 +183,17 @@ def make_handler(db_path, limiter, provider):
     token = store.create_api_token(conn, hh, uid, name, [SHORTCUT_SCOPE])
     # The plain token is returned only here; it cannot be shown again.
     return self.send_json(201, {'token': token, 'name': name, 'scope': SHORTCUT_SCOPE})
+   if path == '/api/calendar':
+    if store.get_location(conn, hh) is None:
+     raise ValueError('Set the location first, so event times match your time zone')
+    text = payload.get('ics')
+    if not isinstance(text, str) or not text.strip(): raise ValueError('Paste the calendar (.ics) text')
+    events, skipped = ics.parse_events(text, store.get_location(conn, hh)['tz'])
+    store.replace_calendar(conn, hh, events)
+    return self.send_json(200, {'imported': len(events), 'skipped': skipped})
+   if path == '/api/calendar/clear':
+    store.clear_calendar(conn, hh)
+    return self.send_json(200, {'ok': True})
    match = TOKEN_REVOKE.match(path)
    if match:
     if not store.revoke_api_token(conn, hh, int(match.group(1))): return self.send_error_json(404, 'Not found')

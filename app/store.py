@@ -1,5 +1,7 @@
 """SQLite persistence for the Family Hub. Every item query is scoped to one household."""
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import hashlib, os, secrets, sqlite3, time
 from . import content
 
@@ -61,6 +63,16 @@ CREATE TABLE IF NOT EXISTS api_tokens (
  last_used_at INTEGER,
  revoked_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS calendar_events (
+ id INTEGER PRIMARY KEY,
+ household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+ uid TEXT NOT NULL,
+ day TEXT NOT NULL,
+ time TEXT NOT NULL DEFAULT '',
+ title TEXT NOT NULL,
+ private INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS calendar_household_day ON calendar_events(household_id, day);
 CREATE INDEX IF NOT EXISTS shopping_household ON shopping(household_id);
 CREATE INDEX IF NOT EXISTS events_household ON events(household_id);
 """
@@ -191,12 +203,42 @@ def get_weather(conn, household_id):
 def put_weather(conn, household_id, fetched_at, payload):
  conn.execute('INSERT OR REPLACE INTO weather_cache(household_id,fetched_at,payload) VALUES(?,?,?)', (household_id, fetched_at, payload))
 
+def household_today(conn, household_id):
+ """Today's date in the household's time zone when a location is set, otherwise the server's date."""
+ loc = get_location(conn, household_id)
+ return datetime.now(ZoneInfo(loc['tz'])).date().isoformat() if loc else date.today().isoformat()
+
+def replace_calendar(conn, household_id, rows):
+ """Replaces the imported calendar in one transaction. Manual events are not affected."""
+ conn.execute('BEGIN')
+ try:
+  conn.execute('DELETE FROM calendar_events WHERE household_id=?', (household_id,))
+  conn.executemany('INSERT INTO calendar_events(household_id,uid,day,time,title,private) VALUES(?,?,?,?,?,?)',
+   [(household_id, r['uid'], r['day'], r['time'], r['title'], int(r['private'])) for r in rows])
+  conn.execute('COMMIT')
+ except Exception:
+  conn.execute('ROLLBACK')
+  raise
+
+def calendar_count(conn, household_id):
+ return conn.execute('SELECT COUNT(*) n FROM calendar_events WHERE household_id=?', (household_id,)).fetchone()['n']
+
+def clear_calendar(conn, household_id):
+ conn.execute('DELETE FROM calendar_events WHERE household_id=?', (household_id,))
+
+def day_events(conn, household_id, day):
+ """Manual entries (shown every day until removed) plus imported entries for this day, in time order."""
+ items = [{'title': r['title'], 'time': r['time'], 'private': bool(r['private'])} for r in list_events(conn, household_id)]
+ items += [{'title': r['title'], 'time': r['time'], 'private': bool(r['private'])} for r in conn.execute(
+  'SELECT title,time,private FROM calendar_events WHERE household_id=? AND day=?', (household_id, day)).fetchall()]
+ return sorted(items, key=lambda e: (e['time'] == '', e['time']))
+
 def snapshot(conn, household_id, today, weather):
  """Renderer input for one household on one date."""
  return {
   'date': today,
   'weather': weather,
   'quote': content.verse_for(today),
-  'events': [{'title': r['title'], 'time': r['time'], 'private': bool(r['private'])} for r in list_events(conn, household_id)],
+  'events': day_events(conn, household_id, today),
   'shopping': [{'title': r['title'], 'done': bool(r['done'])} for r in list_shopping(conn, household_id)],
  }
