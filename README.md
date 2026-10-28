@@ -47,6 +47,8 @@ The PNG carries 167 ppi metadata (Kindle Touch density), so printing at 100% sho
 python3 -m unittest discover -s tests -v
 ```
 
+The end-to-end tests (`tests/test_e2e.py`) check that a phone edit changes the next preview and that the preview matches the saved data. The browser test drives the real phone page with Playwright. It runs when `node` and the `playwright` package are installed, and is skipped otherwise.
+
 ## Scope
 - Today renderer: 600×800 PNG, deterministic for the same input. Fonts are bundled in `app/fonts/` (Lato and Noto Serif, SIL Open Font License; see `app/fonts/OFL-Lato-NotoSerif.txt`).
 - Family Hub: SQLite storage, sign-in, one household with two member accounts, shopping (add, mark got, remove), events (add with optional time and private flag, remove).
