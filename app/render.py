@@ -5,6 +5,7 @@ from datetime import datetime
 import hashlib, io, os, textwrap
 
 W,H = 600,800
+STALE_MINUTES = 60  # weather older than this shows its age on the display
 DPI = 167  # Kindle Touch D01200 pixel density; lets a print at 100% show true physical size
 BG='#FFFFFF'; BLACK='#161616'; GRAY='#575757'; LINE='#A0A0A0'
 # Bundled OFL fonts (see app/fonts/OFL-Lato-NotoSerif.txt) keep renders reproducible across machines.
@@ -24,6 +25,18 @@ def fit(draw,text,max_width,size=26,kind='sans',min_size=16):
  ell='…'; f=font(min_size,kind)
  while text and draw.textbbox((0,0),text+ell,font=f)[2] > max_width: text=text[:-1]
  return text+ell,f
+
+def quote_lines(draw,text,max_lines=2,width=490):
+ """Wrap text to measured width. Returns (lines, truncated); the caller adds the ellipsis."""
+ lines=[]; cur=''
+ for word in text.split():
+  trial=(cur+' '+word).strip()
+  if draw.textbbox((0,0),trial,font=font(21,'italic'))[2] <= width: cur=trial
+  else:
+   if cur: lines.append(cur)
+   cur=word
+ if cur: lines.append(cur)
+ return lines[:max_lines], len(lines)>max_lines
 
 def render(data):
  im=Image.new('RGB',(W,H),BG); d=ImageDraw.Draw(im)
@@ -45,6 +58,10 @@ def render(data):
  d.text((right-tw,102),temp,font=tfont,fill=BLACK)
  cond,cf=fit(d,weather.get('condition','Weather unavailable'),220,17,'sans')
  bbox=d.textbbox((0,0),cond,font=cf);d.text((right-(bbox[2]-bbox[0]),171),cond,font=cf,fill=GRAY)
+ age=weather.get('age_minutes')
+ if age is not None and age>=STALE_MINUTES: # visible hint that the forecast is old
+  stale=f'Updated {age//60} h ago' if age<48*60 else f'Updated {age//1440} days ago'
+  txt_right(195,stale,15,'sans',GRAY)
  rule(226)
  txt(left,245,'COMING UP',18,'bold',GRAY)
  events=list(data.get('events',[]))[:3]
@@ -67,16 +84,8 @@ def render(data):
  txt(left,622,'A THOUGHT FOR TODAY',18,'bold',GRAY)
  quote=data.get('quote',{})
  q='“'+str(quote.get('text','')).strip('“”')+'”'
- # Two lines max, truncate by measured width.
- words=q.split(); lines=[]; cur=''
- for word in words:
-  trial=(cur+' '+word).strip()
-  if d.textbbox((0,0),trial,font=font(21,'italic'))[2] <= 490: cur=trial
-  else:
-   if cur: lines.append(cur)
-   cur=word
- if cur: lines.append(cur)
- if len(lines)>2: lines=lines[:2];lines[-1]=lines[-1].rstrip('”')+'…'
+ lines,truncated=quote_lines(d,q)
+ if truncated: lines[-1]=lines[-1].rstrip('”')+'…'
  for i,line in enumerate(lines): txt(left,665+i*29,line,21,'italic')
  if not lines: txt(left,665,'No thought selected',21,'italic',GRAY)
  source, sf=fit(d,quote.get('attribution',''),490,18,'sans',15)

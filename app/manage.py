@@ -1,34 +1,48 @@
 """Setup commands for the Family Hub database. Run from the repo root.
 
-  python3 -m app.manage add-user USERNAME   # creates the household on first use
-  python3 -m app.manage seed-demo           # fills an empty household with the sample items
+  python3 -m app.manage add-user USERNAME [--admin]   # first user in a household is always an admin
+  python3 -m app.manage seed-demo                     # fills an empty household with sample items
+  python3 -m app.manage set-location LAT LON TIMEZONE # e.g. 51.5074 -0.1278 Europe/London
+  python3 -m app.manage refresh-feeds                 # re-downloads every calendar feed (schedule this to run)
 """
 from pathlib import Path
 import getpass, json, sys
-from . import store, auth
+from . import store, auth, validate, feeds
+import time
 
-def add_user(username):
- if not auth.valid_username(username):
-  sys.exit('Usernames are 2–32 characters: letters, digits, _ . or -')
+def open_db():
+ store.init_db(store.default_db_path())
+ return store.connect(store.default_db_path())
+
+def add_user(username, admin=False):
+ try:
+  validate.clean_username(username)
+ except ValueError as exc:
+  sys.exit(str(exc))
  password = getpass.getpass('Password (at least 10 characters): ')
- if len(password) < auth.MIN_PASSWORD:
-  sys.exit('Password is too short')
+ try:
+  validate.clean_password(password)
+ except ValueError as exc:
+  sys.exit(str(exc))
  if getpass.getpass('Repeat password: ') != password:
   sys.exit('Passwords do not match')
- store.init_db(store.default_db_path())
- conn = store.connect(store.default_db_path())
+ conn = open_db()
  try:
-  household = store.first_household_id(conn) or store.create_household(conn, 'Family')
-  store.create_user(conn, household, username, auth.hash_password(password))
+  household = store.first_household_id(conn)
+  if household is None:
+   household = store.create_household(conn, 'Family')
+   role = 'admin'  # the first member of a household runs its settings
+  else:
+   role = 'admin' if admin else 'member'
+  store.create_user(conn, household, username, auth.hash_password(password), role)
  except ValueError as exc:
   sys.exit(str(exc))
  finally:
   conn.close()
- print(f'Added {username}.')
+ print(f'Added {username} as {role}.')
 
 def seed_demo():
- store.init_db(store.default_db_path())
- conn = store.connect(store.default_db_path())
+ conn = open_db()
  try:
   household = store.first_household_id(conn)
   if household is None: sys.exit('Add a user first: python3 -m app.manage add-user USERNAME')
@@ -41,8 +55,43 @@ def seed_demo():
   conn.close()
  print('Sample shopping and events added.')
 
+def refresh_feeds():
+ conn = open_db()
+ try:
+  household = store.first_household_id(conn)
+  if household is None: sys.exit('Add a user first: python3 -m app.manage add-user USERNAME')
+  location = store.get_location(conn, household)
+  if location is None: sys.exit('Set the location first: python3 -m app.manage set-location LAT LON TIMEZONE')
+  for feed in store.list_feeds(conn, household):
+   ok, error = feeds.refresh(conn, household, store.get_feed(conn, household, feed['id']),
+    feeds.fetch_https, location['tz'], int(time.time()))
+   print(f"{feed['label']}: " + ('updated' if ok else f'failed ({error})'))
+ finally:
+  conn.close()
+
+def set_location(lat, lon, tz):
+ try:
+  lat, lon, tz = validate.clean_location(lat, lon, tz)
+ except ValueError as exc:
+  sys.exit(str(exc))
+ conn = open_db()
+ try:
+  household = store.first_household_id(conn)
+  if household is None: sys.exit('Add a user first: python3 -m app.manage add-user USERNAME')
+  store.set_location(conn, household, lat, lon, tz)
+ finally:
+  conn.close()
+ print(f'Location set to {lat}, {lon} ({tz}).')
+
 if __name__ == '__main__':
- commands = {'add-user': lambda: add_user(sys.argv[2]) if len(sys.argv) == 3 else sys.exit(__doc__),
-             'seed-demo': seed_demo}
- if len(sys.argv) < 2 or sys.argv[1] not in commands: sys.exit(__doc__)
- commands[sys.argv[1]]()
+ args = sys.argv[1:]
+ if args[:1] == ['add-user'] and len(args) in (2, 3) and args[2:] in ([], ['--admin']):
+  add_user(args[1], admin=len(args) == 3)
+ elif args == ['seed-demo']:
+  seed_demo()
+ elif args == ['refresh-feeds']:
+  refresh_feeds()
+ elif args[:1] == ['set-location'] and len(args) == 4:
+  set_location(*args[1:4])
+ else:
+  sys.exit(__doc__)
