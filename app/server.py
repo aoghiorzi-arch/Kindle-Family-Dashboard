@@ -13,6 +13,9 @@ APP_JS = (ROOT/'static'/'app.js').read_bytes()
 COOKIE = 'kfd_session'
 SESSION_SECONDS = 14*86400
 SHORTCUT_SCOPE = 'shopping:add'  # the only scope a Shortcuts token can get
+DISPLAY_SCOPE = 'display:read'  # the only scope a display token can get: read this household's frame
+TOKEN_SCOPES = {'shortcut': SHORTCUT_SCOPE, 'display': DISPLAY_SCOPE}
+DISPLAY_FRAME_PATH = '/api/display/frame.png'
 ITEM_ROUTE = re.compile(r'^/api/(shopping|events)/(\d+)/(toggle|delete)$')
 TOKEN_REVOKE = re.compile(r'^/api/tokens/(\d+)/revoke$')
 FEED_ROUTE = re.compile(r'^/api/feeds/(\d+)/(refresh|delete|schedule)$')
@@ -73,6 +76,7 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
 
   def do_GET(self):
    path = urlparse(self.path).path
+   if path == DISPLAY_FRAME_PATH: return self.display_frame()
    if path == '/': return self.send_bytes(200, INDEX, 'text/html; charset=utf-8')
    if path == '/static/app.js': return self.send_bytes(200, APP_JS, 'application/javascript; charset=utf-8')
    conn = None
@@ -82,17 +86,35 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
     if user is None: return self.send_error_json(401, 'Sign in required')
     if path == '/api/state': return self.send_json(200, self.state(conn, user))
     if path == '/frame.png':
-     hh = user['household_id']
-     frame = frame_service.refresh(conn, hh)
-     if frame is None: return self.send_error_json(503, 'Preview unavailable. Please try again shortly.')
-     body, digest, stale = frame
-     extra = {'ETag': f'"{digest}"', 'X-Frame-Stale': 'true' if stale else 'false'}
-     if self.headers.get('If-None-Match') == extra['ETag']:
-      return self.send_bytes(304, b'', 'image/png', extra)
-     return self.send_bytes(200, body, 'image/png', extra)
+     return self.frame_response(conn, user['household_id'], 'Preview unavailable. Please try again shortly.')
     return self.send_bytes(404, b'Not found', 'text/plain; charset=utf-8')
    except storage_secrets.StorageError:
     return self.send_error_json(503, 'Calendar storage unavailable; ask the administrator to check the server key.')
+   finally:
+    if conn is not None: conn.close()
+
+  def frame_response(self, conn, household_id, unavailable='Frame unavailable'):
+   frame = frame_service.refresh(conn, household_id)
+   if frame is None: return self.send_error_json(503, unavailable)
+   body, digest, stale = frame
+   extra = {'ETag': f'"{digest}"', 'X-Frame-Stale': 'true' if stale else 'false'}
+   if self.headers.get('If-None-Match') == extra['ETag']:
+    return self.send_bytes(304, b'', 'image/png', extra)
+   return self.send_bytes(200, body, 'image/png', extra)
+
+  def display_frame(self):
+   """Read-only image endpoint for the display. Bearer token only: never a cookie, never in the URL."""
+   header = self.headers.get('Authorization', '')
+   token = header[7:] if header.startswith('Bearer ') else ''
+   conn = None
+   try:
+    conn = store.connect(db_path)
+    row = store.api_token_for_use(conn, token)
+    if row is None: return self.send_error_json(401, 'Invalid or revoked token')
+    if DISPLAY_SCOPE not in row['scopes'].split(','): return self.send_error_json(403, 'Token lacks display:read')
+    return self.frame_response(conn, row['household_id'])
+   except storage_secrets.StorageError:
+    return self.send_error_json(503, 'Frame unavailable')
    finally:
     if conn is not None: conn.close()
 
@@ -200,9 +222,11 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
     return self.send_json(200, {'ok': True})
    if path == '/api/tokens':
     name = validate.clean_title(payload.get('name'), limit=40)
-    token = store.create_api_token(conn, hh, uid, name, [SHORTCUT_SCOPE])
+    kind = payload.get('kind', 'shortcut')
+    if kind not in TOKEN_SCOPES: raise ValueError('Token kind must be shortcut or display')
+    token = store.create_api_token(conn, hh, uid, name, [TOKEN_SCOPES[kind]])
     # The plain token is returned only here; it cannot be shown again.
-    return self.send_json(201, {'token': token, 'name': name, 'scope': SHORTCUT_SCOPE})
+    return self.send_json(201, {'token': token, 'name': name, 'scope': TOKEN_SCOPES[kind]})
    if path == '/api/calendar':
     if store.get_location(conn, hh) is None:
      raise ValueError('Set the location first, so event times match your time zone')
