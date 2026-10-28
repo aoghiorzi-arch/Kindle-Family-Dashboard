@@ -21,19 +21,19 @@ Updated: 28 October 2026. Scope: local software, fictional data. The original pr
 |---|---|---|
 | M0 — Hardware feasibility | Checklist exists; device not assessed here | Exact firmware, battery, recovery research and user-led observations. G0 remains unknown. |
 | M1 — Architecture/environment | Single Python backend, SQLite, bundled fonts, local startup, Python/HTTP/browser checks | Formal lint/type checks and repeatable clean-install CI are not established. G1 is partial. |
-| M2 — Domain/APIs | Validation, persistence, household isolation, sessions, roles, shopping/events | Broader concurrency coverage, idempotent retries and audit requirements remain. G2 is partial. |
+| M2 — Domain/APIs | Validation, persistence, household isolation, sessions, roles, shopping/events; concurrent retries/revocation and snapshot writes tested | Broader audit requirements remain. G2 is partial. |
 | M3 — Family Hub | Mobile shopping/calendar/settings and authenticated preview; browser workflows tested | Safari/accessibility review, broader offline states and additional display settings remain. G3 evidence covers the lean flow. |
 | M4 — Data/scheduling | Fake weather TTL/failure cache, computed sunset, daily verse, local frame worker, recurring calendars, opt-in feed scheduling and encrypted feed/source storage | Live weather and RSS remain deferred. G4 is partial. |
 | M5 — Renderer/simulator | Deterministic 600×800 Today PNG, privacy masking, atomic files, hashes, persisted fallback | Printable physical-size fixtures and bounds checks are implemented; user paper acceptance, golden-image suite and later pages remain. G5 is partial. |
-| M6 — Shortcuts/multi-user | Scoped/revocable shopping tokens, permissions and isolation checks | Idempotency, duplicate/offline retries and full device credential scenarios remain. G6 is partial. |
+| M6 — Shortcuts/multi-user | Scoped/revocable tokens, permissions/isolation, persistent retry receipts and transactional authorization; concurrency/restart/deletion/rollback covered | Client offline queue and full device credential scenarios remain. G6 is partial. |
 | M7 — Kindle integration | No device changes or client implementation | Requires completed hardware assessment and separate explicit approval. |
-| M8 — Deployment/acceptance | Local-only application; feed URLs/raw sources encrypted with a separate key | HTTPS, hardened hosting, separate key custody/rotation, backup/restore, 72-hour soak and production approval remain. |
+| M8 — Deployment/acceptance | Local-only; encrypted calendar fields, verified manual snapshots, fixture recovery/login/frame drill and credential reset | Actual-machine custody/recovery, off-machine retention, key rotation, HTTPS/hardened hosting, 72-hour soak and production approval remain. |
 
 ## Next priorities
 
 1. Print and review the generated Today fixtures at physical six-inch size; automated overflow/privacy checks and visual inspection are complete.
-2. Plan backup scheduling and key rotation; verified backup/restore with separate key custody is implemented.
-3. Broaden multi-user concurrency and soak testing; persistent Shortcut retry receipts are implemented.
+2. Establish actual-machine key/backup custody and rehearse recovery; local snapshot/restore, field encryption and credential reset are implemented.
+3. Complete Safari/accessibility, clean-install CI, remaining audit requirements and the soak test; concurrency/revocation and snapshot consistency are covered locally.
 4. Select a hosting/runtime approach after requirements are verified. No public deployment in this milestone.
 5. Complete the hardware checklist with the user before selecting or installing any Kindle-side component.
 
@@ -66,8 +66,18 @@ See `CALENDAR_STORAGE.md` and `VERIFICATION_CALENDAR_STORAGE.md`. This supersede
 
 - [x] Consistent SQLite backup, including WAL, with integrity, foreign-key and encrypted-field verification.
 - [x] Restore to a new private directory using the separate matching key; refuse overwrite and clear browser sessions.
-- [x] Preserve calendars, scoped tokens and retry receipts across recovery; regenerate frames on demand.
+- [x] Preserve calendars and regenerate frames on demand; recovery now revokes restored API tokens, clears receipts and pauses feeds as documented in the follow-up below.
 - [x] Persistent token-scoped request IDs, atomic shopping insertion/receipt, conflict responses and concurrent retry tests.
 - [x] Document recovery rehearsal and UUID reuse in Shortcuts.
 
 See `BACKUP_RESTORE.md`, `SHORTCUTS.md` and `VERIFICATION_RECOVERY.md`. Backup scheduling and full-database encryption remain outside this batch.
+
+## Recovery and concurrency hardening follow-up
+
+- [x] Add explicit read-only snapshot verification, schema checks and bounded copy/verification work.
+- [x] Reset recovered credentials/receipts and pause automatic feeds; verify offline recurrence, fresh frames and password login.
+- [x] Check token identity, current scope and revocation inside the shopping transaction, including unkeyed requests.
+- [x] Bound saved requests per token while allowing matching retries at capacity.
+- [x] Exercise concurrent WAL snapshots, eight-way same/distinct-ID writes, stale authorization, revocation ordering, rollback, restart, CLI and failure paths.
+
+Evidence and remaining limits: `VERIFICATION_RECOVERY_HARDENING.md`. Existing `request_id` and directory-based backup commands remain compatible.

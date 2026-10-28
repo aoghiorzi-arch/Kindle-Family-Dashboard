@@ -29,6 +29,13 @@ Keep the token out of shared Shortcuts. Anyone who has the Shortcut can add item
 - `409` — this request ID was already used with a different title.
 - `400` — the title is invalid, or request_id is not 1–128 letters, digits, hyphens or underscores.
 - `401` — the token is wrong or revoked.
+- `403` — the token no longer has shopping permission.
+- `429` — the token has 5,000 saved request receipts. Existing matching retries still work; ask an administrator to replace the token for new requests. Do not remove `request_id` to work around the limit.
+- `503` — the shopping write is temporarily unavailable. Keep the same request ID/title for a later retry.
 
 
-Retry receipts persist across server restarts and backup/restore, and are scoped to each token. Deleting or completing an item does not erase its receipt. A new intended purchase, even with the same title, needs a new request ID. Revoked tokens are rejected even for retries. Existing clients without `request_id` retain their original behaviour: each request adds an item. Receipts are retained for the lifetime of the token record; there is no time-based expiry.
+Retry receipts persist across server restarts and are included in backups, scoped to each token. Deleting or completing an item does not erase its receipt. A new intended purchase, even with the same title, needs a new request ID. IDs are case-sensitive; titles are trimmed. Existing clients without `request_id` retain their original behaviour: each request adds an item. Receipts are retained for the lifetime of the token record; there is no time-based expiry. New keyed additions are bounded at 5,000 receipts per token, while prior replays still work at capacity.
+
+Token identity, current scope/revocation and the write are checked together in one SQLite transaction. Revoked tokens cannot replay an old success, and a revocation that finishes before a waiting write acquires its transaction prevents that write. A write that acquired the transaction first may finish before revocation. Restoring a backup invalidates recovered sessions/tokens, clears receipts and pauses automatic feeds. Create a fresh token after recovery and review any pending queue before using the new token's separate request scope.
+
+A phone offline queue is not implemented. A retrying Shortcut must retain its token, request ID and title itself; restart/offline behavior of the client still needs device testing. The existing JSON `request_id` and 201/200/409 response contract is unchanged; no new HTTP header is required.

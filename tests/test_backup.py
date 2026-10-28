@@ -79,7 +79,7 @@ class BackupTest(unittest.TestCase):
    with self.assertRaises(OSError): backup.backup(self.db, self.root/'failed')
   self.assertFalse((self.root/'failed').exists())
 
- def test_recovered_calendar_and_retry_receipt_survive_restart(self):
+ def test_recovered_calendar_survives_restart_with_reset_credentials(self):
   text = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:daily\nDTSTART:20261028T090000Z\nRRULE:FREQ=DAILY\nSUMMARY:Daily\nEND:VEVENT\nEND:VCALENDAR'
   store.set_location(self.conn, self.hh, 51.5, 0, 'Europe/London')
   rows, _ = ics.parse_events(text, 'Europe/London', '2026-10-28')
@@ -97,7 +97,8 @@ class BackupTest(unittest.TestCase):
   conn = store.connect(restored)
   try:
    self.assertEqual(store.day_events(conn, self.hh, '2026-12-10')[0]['title'], 'Daily')
-   self.assertFalse(store.add_shortcut_shopping(conn, store.api_token_for_use(conn, plain), 'Milk', 'repeat'))
+   self.assertIsNone(store.api_token_for_use(conn, plain))
+   self.assertEqual(conn.execute('SELECT count(*) FROM shortcut_requests').fetchone()[0], 0)
    self.assertEqual(len(store.list_shopping(conn, self.hh)), 2)
   finally: conn.close()
 

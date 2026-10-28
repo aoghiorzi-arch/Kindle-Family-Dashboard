@@ -6,10 +6,11 @@
   python3 -m app.manage refresh-feeds                 # manual refresh; do not also schedule alongside the built-in worker
   python3 -m app.manage backup NEW_DIRECTORY          # snapshot; preserve key separately
   python3 -m app.manage restore BACKUP_DB NEW_DIRECTORY # requires matching KFD_KEY_FILE
+  python3 -m app.manage verify-backup BACKUP_DB --key-file ORIGINAL.key
   python3 -m app.manage init-db                       # initialize/migrate offline; preserve the matching key file
 """
 from pathlib import Path
-import getpass, json, sys
+import getpass, json, sys, sqlite3
 from . import store, auth, validate, feeds, secrets as storage_secrets
 import time
 
@@ -93,17 +94,26 @@ if __name__ == '__main__':
  args = sys.argv[1:]
  if args[:1] == ['add-user'] and len(args) in (2, 3) and args[2:] in ([], ['--admin']):
   add_user(args[1], admin=len(args) == 3)
- elif args[:1] in (['backup'], ['restore']):
-  from . import backup
+ elif args[:1] in (['backup'], ['restore'], ['verify-backup']):
+  from . import backup, backups
   try:
    if args[0] == 'backup' and len(args) == 2:
     result = backup.backup(store.default_db_path(), args[1])
    elif args[0] == 'restore' and len(args) == 3:
     result = backup.restore(args[1], args[2])
+   elif args[0] == 'restore' and len(args) == 5 and args[3] == '--key-file':
+    result = backup.restore(args[1], args[2], key_file=args[4])
+   elif args[0] == 'verify-backup' and len(args) == 4 and args[2] == '--key-file':
+    backups.verify(args[1], args[3])
+    print('Backup integrity and calendar-key checks passed.')
+    sys.exit(0)
    else: sys.exit(__doc__)
-  except (OSError, ValueError, storage_secrets.StorageError) as exc:
+  except (OSError, ValueError, storage_secrets.StorageError, backups.BackupError) as exc:
    sys.exit(str(exc))
+  except sqlite3.Error:
+   sys.exit('Recovery failed. Check the database, matching key and private destination; no existing data was overwritten.')
   print(f'Database saved: {result}. Preserve the matching key separately.')
+  if args[0] == 'restore': print('Sessions cleared, recovered tokens revoked and automatic feeds paused. Start with the original KFD_KEY_FILE.')
  elif args == ['seed-demo']:
   seed_demo()
  elif args == ['refresh-feeds']:

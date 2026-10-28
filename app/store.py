@@ -207,7 +207,7 @@ def create_api_token(conn, household_id, user_id, name, scopes):
 def api_token_for_use(conn, token):
  """The active token's household, scopes and creator, or None. Records the time of use."""
  if not token: return None
- row = conn.execute('SELECT id,household_id,scopes,created_by,revoked_at FROM api_tokens WHERE token_hash=?',
+ row = conn.execute('SELECT id,household_id,scopes,created_by,revoked_at,token_hash FROM api_tokens WHERE token_hash=?',
   (hash_token(token),)).fetchone()
  if row is None or row['revoked_at'] is not None: return None
  conn.execute('UPDATE api_tokens SET last_used_at=? WHERE id=?', (int(time.time()), row['id']))
@@ -391,24 +391,42 @@ def snapshot(conn, household_id, today, weather):
 class RequestConflict(ValueError):
  pass
 
+SHORTCUT_RECEIPT_LIMIT = 5000
+
+class ShortcutError(Exception):
+ def __init__(self, status, message):
+  super().__init__(message)
+  self.status = status
+
 
 def add_shortcut_shopping(conn, token, title, request_id=None):
- """Retain receipts for the token lifetime, including after an item is deleted."""
- if request_id is None:
-  add_shopping(conn, token['household_id'], token['created_by'], title)
-  return True
- if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128 or any(
-   c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_' for c in request_id):
-  raise ValueError('request_id must contain 1–128 letters, digits, hyphens or underscores')
+ """Authorize and write in one transaction; receipts survive item deletion/restart."""
  conn.execute('BEGIN IMMEDIATE')
  try:
+  current = conn.execute('SELECT id,household_id,created_by,scopes,revoked_at FROM api_tokens WHERE id=? AND token_hash=? AND household_id=?',
+   (token['id'], token['token_hash'], token['household_id'])).fetchone() if token is not None else None
+  if current is None or current['revoked_at'] is not None:
+   raise ShortcutError(401, 'Invalid or revoked token')
+  if 'shopping:add' not in current['scopes'].split(','):
+   raise ShortcutError(403, 'Token lacks shopping:add')
+  from .validate import clean_title
+  title = clean_title(title)
+  if request_id is None:
+   add_shopping(conn, current['household_id'], current['created_by'], title)
+   conn.execute('COMMIT')
+   return True
+  if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128 or any(
+    c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_' for c in request_id):
+   raise ValueError('request_id must contain 1–128 letters, digits, hyphens or underscores')
   previous = conn.execute('SELECT title FROM shortcut_requests WHERE token_id=? AND request_id=?',
    (token['id'], request_id)).fetchone()
   if previous is not None:
    if previous['title'] != title: raise RequestConflict('request_id was already used for a different title')
    created = False
   else:
-   add_shopping(conn, token['household_id'], token['created_by'], title)
+   if conn.execute('SELECT count(*) FROM shortcut_requests WHERE token_id=?', (token['id'],)).fetchone()[0] >= SHORTCUT_RECEIPT_LIMIT:
+    raise ShortcutError(429, 'Saved request capacity reached; ask an admin to replace this token')
+   add_shopping(conn, current['household_id'], current['created_by'], title)
    conn.execute('INSERT INTO shortcut_requests VALUES(?,?,?)', (token['id'], request_id, title))
    created = True
   conn.execute('COMMIT')

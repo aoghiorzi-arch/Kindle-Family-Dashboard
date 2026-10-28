@@ -24,8 +24,8 @@ def key_path(db_path):
  return Path(os.environ.get('KFD_KEY_FILE', str(Path(db_path).resolve()) + '.key'))
 
 
-def load_cipher(db_path, create=False):
- path = key_path(db_path)
+def load_cipher(db_path, create=False, path=None):
+ path = key_path(db_path) if path is None else Path(path)
  try:
   if create:
    try:
