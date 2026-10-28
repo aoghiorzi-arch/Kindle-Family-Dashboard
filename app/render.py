@@ -30,6 +30,14 @@ def quote_lines(draw,text,max_lines=2,width=490):
  """Wrap text to measured width. Returns (lines, truncated); the caller adds the ellipsis."""
  lines=[]; cur=''
  for word in text.split():
+  while draw.textbbox((0,0),word,font=font(21,'italic'))[2] > width:
+   if cur: lines.append(cur); cur=''
+   lo,hi=1,len(word)
+   while lo<hi:
+    mid=(lo+hi+1)//2
+    if draw.textbbox((0,0),word[:mid],font=font(21,'italic'))[2]<=width: lo=mid
+    else: hi=mid-1
+   lines.append(word[:lo]); word=word[lo:]
   trial=(cur+' '+word).strip()
   if draw.textbbox((0,0),trial,font=font(21,'italic'))[2] <= width: cur=trial
   else:
@@ -50,21 +58,25 @@ def render(data):
  rule(63)
  dt=datetime.fromisoformat(data['date'])
  txt(left,81,dt.strftime('%A').upper(),22,'bold',GRAY)
- txt(left,112,f"{dt.day} {dt.strftime('%B')}",53,'serif')
+ date_text,date_font=fit(d,f"{dt.day} {dt.strftime('%B')}",295,53,'serif',34)
+ d.text((left,112),date_text,font=date_font,fill=BLACK,anchor='lt')
  txt(left,183,dt.strftime('%Y'),18,'sans',GRAY)
  weather=data.get('weather',{})
- temp=str(weather.get('temperature','—'))+'°'
- tfont=font(50,'serif'); tw=d.textbbox((0,0),temp,font=tfont)[2]
- d.text((right-tw,102),temp,font=tfont,fill=BLACK)
+ temperature=weather.get('temperature')
+ temp=str(temperature)+'°' if temperature is not None else '—'
+ temp,tfont=fit(d,temp,185,50,'serif',32)
+ tw=d.textbbox((0,0),temp,font=tfont)[2]
+ d.text((right-tw,112),temp,font=tfont,fill=BLACK,anchor='lt')
  cond,cf=fit(d,weather.get('condition','Weather unavailable'),220,17,'sans')
- bbox=d.textbbox((0,0),cond,font=cf);d.text((right-(bbox[2]-bbox[0]),171),cond,font=cf,fill=GRAY)
+ bbox=d.textbbox((0,0),cond,font=cf);d.text((right-(bbox[2]-bbox[0]),180),cond,font=cf,fill=GRAY,anchor='lt')
  age=weather.get('age_minutes')
  if age is not None and age>=STALE_MINUTES: # visible hint that the forecast is old
   stale=f'Updated {age//60} h ago' if age<48*60 else f'Updated {age//1440} days ago'
-  txt_right(195,stale,15,'sans',GRAY)
+  txt_right(206,stale,15,'sans',GRAY)
  rule(226)
  txt(left,245,'COMING UP',18,'bold',GRAY)
- events=list(data.get('events',[]))[:3]
+ all_events=list(data.get('events',[]))
+ events=all_events[:3]
  if not events: txt(left,293,'No events scheduled',23,'italic',GRAY)
  for i,event in enumerate(events):
   y=292+i*52
@@ -74,22 +86,28 @@ def render(data):
   et=str(event.get('time',''))
   ew=d.textbbox((0,0),et,font=font(22,'sans'))[2]
   d.text((right-ew,y+2),et,font=font(22,'sans'),fill=GRAY)
+ if len(all_events)>3:
+  remaining=len(all_events)-3
+  txt(left,451,f'+{remaining} more event'+('' if remaining==1 else 's'),16,'sans',GRAY)
  rule(478)
  txt(left,500,'OUTDOORS',18,'bold',GRAY)
- txt(left,538,'Sunset  '+str(weather.get('sunset','—')),24,'sans')
+ sunset,sunset_font=fit(d,'Sunset  '+str(weather.get('sunset','—')),285,24,'sans',20)
+ d.text((left,538),sunset,font=sunset_font,fill=BLACK,anchor='lt')
  txt(365,500,'SHOPPING',18,'bold',GRAY)
  count=sum(not x.get('done',False) for x in data.get('shopping',[]))
- txt(365,538,f'{count} items to get',23,'sans')
+ shopping,shopping_font=fit(d,f'{count} item'+('' if count==1 else 's')+' to get',191,23,'sans',18)
+ d.text((365,538),shopping,font=shopping_font,fill=BLACK,anchor='lt')
  rule(598)
  txt(left,622,'A THOUGHT FOR TODAY',18,'bold',GRAY)
  quote=data.get('quote',{})
- q='“'+str(quote.get('text','')).strip('“”')+'”'
+ thought=str(quote.get('text','')).strip('“”').strip()
+ q='“'+thought+'”' if thought else ''
  lines,truncated=quote_lines(d,q)
- if truncated: lines[-1]=lines[-1].rstrip('”')+'…'
+ if truncated: lines[-1]=fit(d,lines[-1].rstrip('”')+'…',490,21,'italic',21)[0]
  for i,line in enumerate(lines): txt(left,665+i*29,line,21,'italic')
  if not lines: txt(left,665,'No thought selected',21,'italic',GRAY)
  source, sf=fit(d,quote.get('attribution',''),490,18,'sans',15)
- txt(left,729,source,18,'sans',GRAY)
+ d.text((left,729),source,font=sf,fill=GRAY,anchor='lt')
  rule(765)
  txt(left,776,'TODAY  •  PREVIEW',15,'bold',GRAY)
  txt_right(776,'600 × 800',15,'sans',GRAY)

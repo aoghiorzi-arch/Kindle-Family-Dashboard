@@ -51,7 +51,7 @@ The end-to-end tests (`tests/test_e2e.py`) check that a phone edit changes the n
 
 ## Automatic frame lifecycle
 
-While the server runs, a background worker checks every household once a minute. Each check derives the current date in that household's time zone, selects today's imported events and daily verse, recalculates sunset, and refreshes the weather adapter when its 30-minute cache expires. It does **not** download calendar feeds; those still use manual refresh or the existing management command. The worker stops with the server.
+While the server runs, a background worker checks every household once a minute. Each check derives the current date in that household's time zone, selects today's imported events and daily verse, recalculates sunset, and refreshes the weather adapter when its 30-minute cache expires. A separate calendar worker expands saved calendar sources locally and refreshes only feeds whose admin has enabled automatic refresh. Both workers stop with the server.
 
 Complete, verified 600×800 PNGs are written to temporary files and atomically replaced. Identical PNGs keep their existing file and hash. If rendering or writing fails, `/frame.png` serves only that household's verified saved image with `X-Frame-Stale: true`; if none exists, it returns 503. A successful render clears the stale flag. Weather age is separate: a newly rendered screen can contain a visibly old weather forecast.
 
@@ -63,20 +63,26 @@ Complete, verified 600×800 PNGs are written to temporary files and atomically r
 - Weather: server-side adapter with a 30-minute cache. The demo uses `FakeProvider` (fixed values from `app/seed.json`) only. Displays never call a weather service. If a refresh fails, the last good forecast is kept and shows "Updated N h ago" once it is over an hour old.
 - Sunset: computed from the household location and time zone when set (`set-location`). Without a location, the fixture value is used.
 - Admin settings (admins only): add members with a role (member or admin), set the location for sunset, and create or revoke Shortcuts tokens. The first member of a household is an admin. Use `add-user NAME --admin` to add another admin from the command line.
-- Family calendar (admins only): paste an `.ics` export in Household settings. The server never fetches a URL. Only today's events are shown, in the household's time zone. Recurring events are skipped, and the import reports how many. Private events show as "Busy". Imported events can be removed at any time.
+- Family calendar (admins only): paste an `.ics` export in Household settings. The server never fetches a URL. Only today's events are shown, in the household's time zone. Daily, weekly, monthly and yearly recurrences are expanded for a rolling 31-day window; COUNT, UNTIL, EXDATE, RDATE and moved/cancelled instances are handled. The import reports occurrence and skipped-entry counts. Saved source text extends the window locally each day, without another paste. Single events retain their original dates. Events display on their occurrence start date; multi-day occupancy is not rendered across every day. Private events show as "Busy". Imported events can be removed at any time.
 - Calendar feeds (admins only, up to three): add a read-only `https://` calendar address in Household settings, or refresh one by hand. The server downloads it, and only today's events are shown. Protections:
   - https only, standard port, no login in the address, no redirects followed;
   - the host must resolve to a public address, and the connection is made to that exact address;
   - responses are limited to 2 MB and 10 seconds;
   - feed addresses are never shown again after saving (the phone shows only the host) and never appear in error messages.
-  - Refresh runs when you press Refresh, or with `python3 -m app.manage refresh-feeds`. The display never fetches. Schedule that command for automatic refresh once the machine is set up.
-  - Feed addresses are stored in the local database as plain text. Encrypt them at rest before any deployment.
+  - Refresh runs when you press Refresh, or with `python3 -m app.manage refresh-feeds`. An admin can also enable automatic refresh per feed in Household settings: checks run every 30 minutes while the server runs, including after a failed attempt. Existing/new feeds default to manual; the choice and last attempt survive restarts. Pause stops future automatic downloads (an in-flight download may finish). The display never fetches. A separate calendar worker keeps slow downloads out of the frame renderer. Do not schedule the management command as well as the built-in worker.
+  - Feed addresses and cached source calendar text are stored in the local database as plain text. Protect the database and encrypt secrets before deployment. Sources are removed when their pasted import or feed is removed. Cached recurrence can roll forward locally even when a feed is unreachable; it reflects the last downloaded version, not live confirmation.
 - Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked.
 - Daily thought: a King James Version verse chosen by date (the same verse all day), bundled in `app/content.py`. No network calls. Check each verse against a printed Bible before it goes on a family display.
 - A real weather provider makes external network calls and needs separate approval before it is added.
-- Not included: recurring-event expansion, automatic feed scheduling, encryption of stored feed addresses, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
+- Not included: encryption of stored feed addresses/calendar sources, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
 
 For execution priorities and gates see `MASTER_PLAN_V2.md`. The read-only hardware checklist is in `docs/HARDWARE_AUDIT_CHECKLIST.md`. The original detailed plan is preserved in `docs/ORIGINAL_MASTER_PLAN.md`.
 
 
 Current implementation checklist: [`docs/PROGRESS.md`](docs/PROGRESS.md). Verification evidence: [`docs/VERIFICATION_2026-10-28.md`](docs/VERIFICATION_2026-10-28.md).
+
+## Review the display at physical size
+
+Run `python3 -m app.review`, then open `data/display-review/index.html`. The self-contained HTML embeds four fictional scenarios (normal, long/stale/private/overflow, empty/unavailable, and one-item/private). Print at **100% / actual size**, without fit-to-page or browser headers/footers. Each board is 91.257 × 121.677 mm at 167 ppi; verify the 50 mm calibration line before judging readability. A paper review at the intended viewing distance remains a user acceptance step; no Kindle connection is needed. Findings: [`docs/DISPLAY_REVIEW.md`](docs/DISPLAY_REVIEW.md).
+
+Calendar parsing uses pinned `icalendar` and `recurring-ical-events` dependencies. Each parse is isolated in a subprocess with a six-second deadline, a 500-component/occurrence cap and 31-day recurrence window; Unix additionally caps memory at 512 MiB and CPU at five seconds. Subdaily rules are reported as unsupported. Failed parses keep the previous import/feed data. The HTTPS downloader retains public-address pinning, no redirects, a 2 MB cap and a download deadline; DNS resolution still uses the operating system resolver.

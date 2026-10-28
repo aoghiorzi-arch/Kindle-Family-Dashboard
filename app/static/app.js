@@ -116,7 +116,11 @@ function feedRow(feed) {
   let status = 'not synced yet';
   if (feed.last_error) status = `failed: ${feed.last_error}`;
   else if (feed.last_success) status = `synced ${new Date(feed.last_success * 1000).toLocaleString()}`;
-  li.append(text('span', `${feed.label} · ${feed.host} · ${status}`));
+  if (feed.skipped) status += ` · ${feed.skipped} unsupported entries skipped`;
+  li.append(text('span', `${feed.label} · ${feed.host} · ${status} · ${feed.refresh_enabled ? 'automatic every 30 minutes' : 'manual refresh'}`));
+  const schedule = text('button', feed.refresh_enabled ? 'Pause automatic refresh' : 'Enable automatic refresh', 'link');
+  schedule.onclick = () => act(`/api/feeds/${feed.id}/schedule`, {enabled: !feed.refresh_enabled},
+    feed.refresh_enabled ? 'Automatic refresh paused.' : 'Automatic refresh enabled. Checks every 30 minutes while the server runs.');
   const refreshButton = text('button', 'Refresh', 'link');
   refreshButton.onclick = async () => {
     try {
@@ -127,7 +131,7 @@ function feedRow(feed) {
   };
   const remove = text('button', 'Remove', 'link danger');
   remove.onclick = () => act(`/api/feeds/${feed.id}/delete`, {}, 'Feed removed.');
-  li.append(refreshButton, remove);
+  li.append(schedule, refreshButton, remove);
   return li;
 }
 
@@ -243,7 +247,7 @@ $('calendarForm').addEventListener('submit', async e => {
   try {
     const j = await call('/api/calendar', {method: 'POST', body: {ics: $('ics').value}});
     $('ics').value = '';
-    message(`Calendar imported: ${j.imported} events. ${j.skipped} recurring or unreadable entries skipped.`);
+    message(`Calendar imported: ${j.imported} occurrences. ${j.skipped} unsupported or unreadable entries skipped.`);
     await refresh();
   } catch (err) { handleError(err); }
 });

@@ -4,7 +4,7 @@ from http.cookies import SimpleCookie
 from urllib.parse import urlparse
 from pathlib import Path
 import json, re, sys, time, threading
-from . import store, auth, weather, validate, ics, feeds, frames
+from . import store, auth, weather, validate, ics, feeds, frames, calendars
 
 ROOT = Path(__file__).resolve().parent
 FIXTURE = json.loads((ROOT/'seed.json').read_text())
@@ -15,7 +15,7 @@ SESSION_SECONDS = 14*86400
 SHORTCUT_SCOPE = 'shopping:add'  # the only scope a Shortcuts token can get
 ITEM_ROUTE = re.compile(r'^/api/(shopping|events)/(\d+)/(toggle|delete)$')
 TOKEN_REVOKE = re.compile(r'^/api/tokens/(\d+)/revoke$')
-FEED_ROUTE = re.compile(r'^/api/feeds/(\d+)/(refresh|delete)$')
+FEED_ROUTE = re.compile(r'^/api/feeds/(\d+)/(refresh|delete|schedule)$')
 ADMIN_ONLY = ('/api/members', '/api/location', '/api/tokens')
 CALENDAR_LIMIT = 300_000  # bytes; a family calendar export is much larger than other requests
 SECURITY_HEADERS = {
@@ -160,7 +160,8 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
     state['location'] = dict(loc) if loc else None
     state['calendar'] = {'events': store.calendar_count(conn, hh)}
     state['feeds'] = [{'id': r['id'], 'label': r['label'], 'host': feeds.host_of(r['url']),
-     'last_success': r['last_success'], 'last_error': r['last_error']} for r in store.list_feeds(conn, hh)]
+     'last_success': r['last_success'], 'last_error': r['last_error'],
+     'refresh_enabled': bool(r['refresh_enabled']), 'skipped': r['skipped_count']} for r in store.list_feeds(conn, hh)]
     state['tokens'] = [{'id': r['id'], 'name': r['name'], 'scopes': r['scopes'], 'created_at': r['created_at'],
      'last_used_at': r['last_used_at'], 'revoked': r['revoked_at'] is not None} for r in store.list_api_tokens(conn, hh)]
    return state
@@ -194,8 +195,9 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
      raise ValueError('Set the location first, so event times match your time zone')
     text = payload.get('ics')
     if not isinstance(text, str) or not text.strip(): raise ValueError('Paste the calendar (.ics) text')
-    events, skipped = ics.parse_events(text, store.get_location(conn, hh)['tz'])
-    store.replace_calendar(conn, hh, events)
+    today = store.household_today(conn, hh)
+    events, skipped = ics.parse_events(text, store.get_location(conn, hh)['tz'], today)
+    store.replace_calendar(conn, hh, events, text, today)
     return self.send_json(200, {'imported': len(events), 'skipped': skipped})
    if path == '/api/feeds':
     loc = store.get_location(conn, hh)
@@ -210,6 +212,11 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
    match = FEED_ROUTE.match(path)
    if match:
     feed_id, action = int(match.group(1)), match.group(2)
+    if action == 'schedule':
+     enabled = payload.get('enabled')
+     if not isinstance(enabled, bool): raise ValueError('Choose whether automatic refresh is enabled')
+     if not store.set_feed_schedule(conn, hh, feed_id, enabled): return self.send_error_json(404, 'Not found')
+     return self.send_json(200, {'ok': True})
     if action == 'delete':
      if not store.delete_feed(conn, hh, feed_id): return self.send_error_json(404, 'Not found')
      return self.send_json(200, {'ok': True})
@@ -241,13 +248,14 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
 class QuietServer(ThreadingHTTPServer):
  def serve_forever(self, poll_interval=0.5):
   stop = threading.Event()
-  worker = threading.Thread(target=self.frame_service.run, args=(stop,), daemon=True)
-  worker.start()
+  workers = [threading.Thread(target=service.run, args=(stop,), daemon=True)
+             for service in (self.frame_service, self.calendar_service)]
+  for worker in workers: worker.start()
   try:
    super().serve_forever(poll_interval)
   finally:
    stop.set()
-   worker.join()
+   for worker in workers: worker.join()
 
  def handle_error(self, request, client_address):
   # A browser cancelling an image request mid-download is normal; do not print a traceback for it.
@@ -260,6 +268,7 @@ def make_server(db_path, port=8765, host='127.0.0.1', provider=None, fetcher=Non
  frame_service = frames.FrameService(db_path, provider, clock)
  server = QuietServer((host, port), make_handler(db_path, auth.LoginLimiter(), provider, fetcher, frame_service))
  server.frame_service = frame_service
+ server.calendar_service = calendars.CalendarService(db_path, fetcher, clock)
  return server
 
 def main():

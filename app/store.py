@@ -83,6 +83,13 @@ CREATE TABLE IF NOT EXISTS calendar_feeds (
  last_success INTEGER,
  last_error TEXT
 );
+CREATE TABLE IF NOT EXISTS calendar_sources (
+ household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+ source TEXT NOT NULL,
+ text TEXT NOT NULL,
+ expanded_day TEXT,
+ PRIMARY KEY(household_id, source)
+);
 CREATE INDEX IF NOT EXISTS calendar_household_day ON calendar_events(household_id, day);
 CREATE INDEX IF NOT EXISTS shopping_household ON shopping(household_id);
 CREATE INDEX IF NOT EXISTS events_household ON events(household_id);
@@ -110,6 +117,8 @@ def init_db(path):
   # Databases created by earlier versions get newer columns added in place.
   ensure_column(conn, 'users', 'role', "TEXT NOT NULL DEFAULT 'member'")
   ensure_column(conn, 'calendar_events', 'source', "TEXT NOT NULL DEFAULT 'paste'")
+  ensure_column(conn, 'calendar_feeds', 'refresh_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  ensure_column(conn, 'calendar_feeds', 'skipped_count', 'INTEGER NOT NULL DEFAULT 0')
  finally: conn.close()
 
 def hash_token(token):
@@ -208,6 +217,7 @@ def delete_event(conn, household_id, item_id):
 
 def set_location(conn, household_id, lat, lon, tz):
  conn.execute('INSERT OR REPLACE INTO locations(household_id,lat,lon,tz) VALUES(?,?,?,?)', (household_id, lat, lon, tz))
+ conn.execute('UPDATE calendar_sources SET expanded_day=NULL WHERE household_id=?', (household_id,))
 
 def get_location(conn, household_id):
  return conn.execute('SELECT lat,lon,tz FROM locations WHERE household_id=?', (household_id,)).fetchone()
@@ -224,38 +234,61 @@ def household_today(conn, household_id, now=None):
  tz = ZoneInfo(loc['tz']) if loc else None
  return (datetime.fromtimestamp(now, tz) if now is not None else datetime.now(tz)).date().isoformat()
 
-def replace_calendar(conn, household_id, rows):
- """Replaces the pasted calendar in one transaction. Manual events and feeds are not affected."""
- conn.execute('BEGIN')
+def replace_source_events(conn, household_id, source, rows, text=None, expanded_day=None, expected_text=None, expected_tz=None):
+ """Atomic source replacement. A concurrent delete/edit cannot be resurrected by a worker."""
+ conn.execute('BEGIN IMMEDIATE')
  try:
-  conn.execute("DELETE FROM calendar_events WHERE household_id=? AND source='paste'", (household_id,))
-  conn.executemany("INSERT INTO calendar_events(household_id,uid,day,time,title,private,source) VALUES(?,?,?,?,?,?,'paste')",
-   [(household_id, r['uid'], r['day'], r['time'], r['title'], int(r['private'])) for r in rows])
+  if expected_tz is not None:
+   location = get_location(conn, household_id)
+   if location is None or location['tz'] != expected_tz:
+    conn.execute('ROLLBACK')
+    return False
+  if source.startswith('feed:') and get_feed(conn, household_id, int(source[5:])) is None:
+   conn.execute('ROLLBACK')
+   return False
+  if expected_text is not None:
+   current = conn.execute('SELECT text FROM calendar_sources WHERE household_id=? AND source=?',
+    (household_id, source)).fetchone()
+   if current is None or current['text'] != expected_text:
+    conn.execute('ROLLBACK')
+    return False
+  conn.execute('DELETE FROM calendar_events WHERE household_id=? AND source=?', (household_id, source))
+  conn.executemany('INSERT INTO calendar_events(household_id,uid,day,time,title,private,source) VALUES(?,?,?,?,?,?,?)',
+   [(household_id, r['uid'], r['day'], r['time'], r['title'], int(r['private']), source) for r in rows])
+  if text is not None:
+   conn.execute('INSERT OR REPLACE INTO calendar_sources(household_id,source,text,expanded_day) VALUES(?,?,?,?)',
+    (household_id, source, text, expanded_day))
+  else:
+   conn.execute('DELETE FROM calendar_sources WHERE household_id=? AND source=?', (household_id, source))
   conn.execute('COMMIT')
+  return True
  except Exception:
   conn.execute('ROLLBACK')
   raise
+
+def replace_calendar(conn, household_id, rows, text=None, expanded_day=None):
+ return replace_source_events(conn, household_id, 'paste', rows, text, expanded_day)
 
 def calendar_count(conn, household_id):
  return conn.execute('SELECT COUNT(*) n FROM calendar_events WHERE household_id=?', (household_id,)).fetchone()['n']
 
 def clear_calendar(conn, household_id):
- conn.execute("DELETE FROM calendar_events WHERE household_id=? AND source='paste'", (household_id,))
+ replace_calendar(conn, household_id, [])
 
 def list_feeds(conn, household_id):
- return conn.execute('''SELECT id,label,url,last_attempt,last_success,last_error FROM calendar_feeds
+ return conn.execute('''SELECT id,label,url,last_attempt,last_success,last_error,refresh_enabled,skipped_count FROM calendar_feeds
   WHERE household_id=? ORDER BY id''', (household_id,)).fetchall()
 
 def get_feed(conn, household_id, feed_id):
- return conn.execute('SELECT id,label,url FROM calendar_feeds WHERE id=? AND household_id=?',
+ return conn.execute('SELECT id,label,url,refresh_enabled,last_attempt FROM calendar_feeds WHERE id=? AND household_id=?',
   (feed_id, household_id)).fetchone()
 
 def feed_count(conn, household_id):
  return conn.execute('SELECT COUNT(*) n FROM calendar_feeds WHERE household_id=?', (household_id,)).fetchone()['n']
 
-def add_feed(conn, household_id, label, url):
- return conn.execute('INSERT INTO calendar_feeds(household_id,label,url,created_at) VALUES(?,?,?,?)',
-  (household_id, label, url, int(time.time()))).lastrowid
+def add_feed(conn, household_id, label, url, refresh_enabled=False):
+ return conn.execute('INSERT INTO calendar_feeds(household_id,label,url,created_at,refresh_enabled) VALUES(?,?,?,?,?)',
+  (household_id, label, url, int(time.time()), int(refresh_enabled))).lastrowid
 
 def delete_feed(conn, household_id, feed_id):
  """Removes the feed and its events. Returns False when the feed is not this household's."""
@@ -264,30 +297,25 @@ def delete_feed(conn, household_id, feed_id):
  try:
   conn.execute("DELETE FROM calendar_events WHERE household_id=? AND source=?", (household_id, f'feed:{feed_id}'))
   conn.execute('DELETE FROM calendar_feeds WHERE id=? AND household_id=?', (feed_id, household_id))
+  conn.execute('DELETE FROM calendar_sources WHERE household_id=? AND source=?', (household_id, f'feed:{feed_id}'))
   conn.execute('COMMIT')
  except Exception:
   conn.execute('ROLLBACK')
   raise
  return True
 
-def set_feed_result(conn, feed_id, now, error):
+def set_feed_result(conn, feed_id, now, error, skipped=0):
  if error is None:
-  conn.execute('UPDATE calendar_feeds SET last_attempt=?, last_success=?, last_error=NULL WHERE id=?', (now, now, feed_id))
+  conn.execute('UPDATE calendar_feeds SET last_attempt=?, last_success=?, last_error=NULL, skipped_count=? WHERE id=?', (now, now, skipped, feed_id))
  else:
   conn.execute('UPDATE calendar_feeds SET last_attempt=?, last_error=? WHERE id=?', (now, error, feed_id))
 
-def replace_feed_events(conn, household_id, feed_id, rows):
- """Replaces one feed's events in one transaction. The other sources are not affected."""
- source = f'feed:{feed_id}'
- conn.execute('BEGIN')
- try:
-  conn.execute('DELETE FROM calendar_events WHERE household_id=? AND source=?', (household_id, source))
-  conn.executemany('INSERT INTO calendar_events(household_id,uid,day,time,title,private,source) VALUES(?,?,?,?,?,?,?)',
-   [(household_id, r['uid'], r['day'], r['time'], r['title'], int(r['private']), source) for r in rows])
-  conn.execute('COMMIT')
- except Exception:
-  conn.execute('ROLLBACK')
-  raise
+def replace_feed_events(conn, household_id, feed_id, rows, text=None, expanded_day=None, expected_tz=None):
+ return replace_source_events(conn, household_id, f'feed:{feed_id}', rows, text, expanded_day, expected_tz=expected_tz)
+
+def set_feed_schedule(conn, household_id, feed_id, enabled):
+ return conn.execute('UPDATE calendar_feeds SET refresh_enabled=? WHERE id=? AND household_id=?',
+  (int(enabled), feed_id, household_id)).rowcount == 1
 
 def day_events(conn, household_id, day):
  """Manual entries (shown every day until removed) plus imported entries for this day, in time order."""

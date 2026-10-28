@@ -7,12 +7,14 @@ Guards against server-side request forgery:
 - responses are capped in size and time.
 The feed address is secret, so it is never returned to clients or written to error messages.
 """
-import http.client, ipaddress, socket, ssl, urllib.parse
+import http.client, ipaddress, socket, ssl, urllib.parse, threading, time
 from . import ics, store
 
 MAX_BYTES = 2_000_000
 TIMEOUT = 10
 MAX_FEEDS = 3
+REFRESH_SECONDS = 30 * 60
+REFRESH_LOCK = threading.Lock()
 
 class FeedError(Exception):
  """A message that is safe to show: it never contains the feed address."""
@@ -20,12 +22,16 @@ class FeedError(Exception):
 def validate_url(url):
  if not isinstance(url, str) or len(url) > 2048:
   raise ValueError('Feed address must be an https:// address up to 2048 characters')
- parts = urllib.parse.urlsplit(url.strip())
+ try:
+  parts = urllib.parse.urlsplit(url.strip())
+  port = parts.port
+ except ValueError:
+  raise ValueError('Feed address is not a valid https address') from None
  if parts.scheme != 'https' or not parts.hostname:
   raise ValueError('Feed address must start with https://')
  if parts.username or parts.password:
   raise ValueError('Feed address must not contain a login')
- if parts.port not in (None, 443):
+ if port not in (None, 443):
   raise ValueError('Feed address must use the standard https port')
  literal = ip_literal(parts.hostname)
  if literal is not None and not literal.is_global:
@@ -73,11 +79,23 @@ def fetch_https(url):
  connection = PinnedHTTPSConnection(parts.hostname, address)
  path = (parts.path or '/') + (f'?{parts.query}' if parts.query else '')
  try:
+  deadline = time.monotonic() + TIMEOUT
   connection.request('GET', path, headers={'Accept': 'text/calendar', 'User-Agent': 'FamilyHub'})
+  sock = connection.sock
+  sock.settimeout(max(0.01, deadline - time.monotonic()))
   response = connection.getresponse()
   if response.status != 200:
    raise FeedError(f'Feed answered with HTTP {response.status}; redirects are not followed')
-  body = response.read(MAX_BYTES + 1)
+  chunks, size = [], 0
+  while size <= MAX_BYTES:
+   remaining = deadline - time.monotonic()
+   if remaining <= 0: raise FeedError('Feed download timed out')
+   sock.settimeout(remaining)
+   chunk = response.read1(min(65536, MAX_BYTES + 1 - size))
+   if not chunk: break
+   chunks.append(chunk)
+   size += len(chunk)
+  body = b''.join(chunks)
  except FeedError:
   raise
  except (OSError, http.client.HTTPException, ssl.SSLError):
@@ -88,16 +106,33 @@ def fetch_https(url):
   raise FeedError('Feed is too large')
  return body.decode('utf-8', errors='replace')
 
-def refresh(conn, household_id, feed, fetcher, tz, now):
+def refresh(conn, household_id, feed, fetcher, tz, now, scheduled=False):
  """Downloads one feed and replaces its events. On failure the last good events are kept."""
+ with REFRESH_LOCK:
+  if feed is None: return False, 'Feed was removed'
+  feed = store.get_feed(conn, household_id, feed['id'])
+  if feed is None: return False, 'Feed was removed'
+  if scheduled and (not feed['refresh_enabled'] or
+      (feed['last_attempt'] is not None and now - feed['last_attempt'] < REFRESH_SECONDS)):
+   return True, None
+  return _refresh(conn, household_id, feed, fetcher, tz, now)
+
+def _refresh(conn, household_id, feed, fetcher, tz, now):
  try:
-  events, _ = ics.parse_events(fetcher(feed['url']), tz)
+  text = fetcher(feed['url'])
+  today = store.household_today(conn, household_id, now)
+  events, skipped = ics.parse_events(text, tz, today)
  except FeedError as exc:
   store.set_feed_result(conn, feed['id'], now, str(exc))
   return False, str(exc)
  except ValueError:
   store.set_feed_result(conn, feed['id'], now, 'Feed could not be read as a calendar')
   return False, 'Feed could not be read as a calendar'
- store.replace_feed_events(conn, household_id, feed['id'], events)
- store.set_feed_result(conn, feed['id'], now, None)
+ except Exception:
+  store.set_feed_result(conn, feed['id'], now, 'Could not refresh the feed')
+  return False, 'Could not refresh the feed'
+ if not store.replace_feed_events(conn, household_id, feed['id'], events, text, today, expected_tz=tz):
+  return False, 'Feed or location changed; refresh again'
+ store.set_feed_result(conn, feed['id'], now, None, skipped)
  return True, None
+

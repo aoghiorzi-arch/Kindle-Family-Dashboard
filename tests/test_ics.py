@@ -36,8 +36,8 @@ class IcsTest(unittest.TestCase):
                   'UID:9\r\nDTSTART:20261028T120000\r\nSUMMARY:C\r\nCLASS:PUBLIC')
   self.assertEqual([e['private'] for e in ics.parse_events(text, 'Europe/London')[0]], [True, True, False])
 
- def test_recurring_cancelled_and_unreadable_are_skipped(self):
-  text = calendar('UID:10\r\nDTSTART:20261028T100000\r\nRRULE:FREQ=DAILY\r\nSUMMARY:Daily',
+ def test_unsupported_cancelled_and_unreadable_are_skipped(self):
+  text = calendar('UID:10\r\nDTSTART:20261028T100000\r\nRRULE:FREQ=SECONDLY\r\nSUMMARY:Daily',
                   'UID:11\r\nDTSTART:20261028T100000\r\nRECURRENCE-ID:20261027T100000\r\nSUMMARY:Moved',
                   'UID:12\r\nDTSTART:20261028T100000\r\nSTATUS:CANCELLED\r\nSUMMARY:Off',
                   'UID:13\r\nDTSTART:notadate\r\nSUMMARY:Broken',
@@ -58,3 +58,4 @@ class IcsTest(unittest.TestCase):
 
 if __name__ == '__main__':
  unittest.main()
+
