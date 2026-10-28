@@ -81,3 +81,14 @@ See `BACKUP_RESTORE.md`, `SHORTCUTS.md` and `VERIFICATION_RECOVERY.md`. Backup s
 - [x] Exercise concurrent WAL snapshots, eight-way same/distinct-ID writes, stale authorization, revocation ordering, rollback, restart, CLI and failure paths.
 
 Evidence and remaining limits: `VERIFICATION_RECOVERY_HARDENING.md`. Existing `request_id` and directory-based backup commands remain compatible.
+
+## Stage A — prepare without the Kindle (branch `stage-a-kindle-prep`)
+
+- [x] A1 Display token (`display:read`), `/api/display/frame.png`, 304s, revocation, household scoping, restore invalidation — `tests/test_display_token.py`.
+- [x] A2 `scripts/kfd`, `/healthz`, pinned dependencies, clean-clone install and `scripts/kfd smoke` passed (Linux, Python 3.13). macOS and the user's actual OS unverified.
+- [x] A3 Loopback-only enforcement, `KFD_PUBLIC_ORIGIN` mode (Secure cookies, HSTS, exact Origin/Host), proxy and firewall guidance — `tests/test_network_boundary.py`. Real TLS proxy, phone CA trust and Kindle TLS compatibility are **not** verified.
+- [x] A4 `display_client/` (bounded download, PNG/CRC validation, atomic cache, ETag, backoff, no redirects, token from 0600 file) — `tests/test_display_client.py`. Unverified on hardware.
+- [x] A5 `docs/HANDOVER.md`.
+- Full suite: 214 tests pass. Fixed a pre-existing start-up race in one frame test and made `shutdown()` wait for workers.
+
+State: ready for supervised Kindle connection, not "Kindle ready".

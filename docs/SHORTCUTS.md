@@ -4,7 +4,7 @@ This lets an iPhone Shortcut add an item to the Family Hub shopping list. It is 
 
 ## Before you start
 - The Shortcut must be able to reach the Family Hub. A server on `127.0.0.1` is reachable only from the Mac itself, so this is for testing on the Mac. Real phone use needs HTTPS hosting, which is a later, separately approved step.
-- Create a token in **Household settings → Shortcuts tokens** (admins only). Copy it immediately; it is shown once. If it is lost or leaked, revoke it and create a new one.
+- Create a token in **Household settings → Tokens (type: Shortcut)** (admins only). Copy it immediately; it is shown once. If it is lost or leaked, revoke it and create a new one.
 
 ## What the token can do
 - Add one shopping item to the household's list: `POST /api/shortcut/shopping` with JSON `{"title": "Milk"}`.

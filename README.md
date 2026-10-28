@@ -25,7 +25,9 @@ The database is `data/family.sqlite3` (git-ignored). Verified per-household fram
 
 Calendar feed addresses and cached `.ics` source text are encrypted using a separate owner-only key file, defaulting to `data/family.sqlite3.key`. Preserve this key: a database copy alone cannot recover these fields. Set `KFD_KEY_FILE` to a protected path outside the application/data backup directory for separate key custody. The app creates a key on first initialization, but never replaces a missing key for an encrypted database. Stop all Family Hub processes before upgrading/migrating. See [`docs/CALENDAR_STORAGE.md`](docs/CALENDAR_STORAGE.md) for migration, key handling and remaining protection limits.
 
-**Do not expose this server to a LAN or the internet.** It binds to loopback and serves plain HTTP, so it has no transport encryption. Session cookies are `HttpOnly` and `SameSite=Strict`, but the `Secure` flag is omitted until HTTPS exists.
+**Do not expose this server to a LAN or the internet.** It binds to loopback only (other hosts are refused) and serves plain HTTP. For a supervised home-network pilot, put a TLS proxy in front and set `KFD_PUBLIC_ORIGIN`; see [`docs/NETWORK_PILOT.md`](docs/NETWORK_PILOT.md) (design and app-layer checks done; real TLS unverified). Without it, session cookies are `HttpOnly`/`SameSite=Strict` but not `Secure`.
+
+**Stage A additions:** `scripts/kfd setup|start|stop|status|health|smoke` ([`docs/INSTALL.md`](docs/INSTALL.md)); revocable read-only display tokens and `/api/display/frame.png` ([`docs/DISPLAY_CONTRACT.md`](docs/DISPLAY_CONTRACT.md)); a portable `display_client/` core (host-tested, unverified on Kindle); [`docs/HANDOVER.md`](docs/HANDOVER.md) for Stage B.
 
 ## Security in this prototype
 - Passwords are hashed with scrypt (standard library). Usernames are case-insensitive.
@@ -81,7 +83,7 @@ Complete, verified 600×800 PNGs are written to temporary files and atomically r
 - Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked. An optional `request_id` makes retries safe without suppressing deliberate repeat purchases. Authorization is rechecked in the insertion transaction; each token retains at most 5,000 keyed request receipts while allowing existing retries at capacity.
 - Daily thought: a King James Version verse chosen by date (the same verse all day), bundled in `app/content.py`. No network calls. Check each verse against a printed Bible before it goes on a family display.
 - A real weather provider makes external network calls and needs separate approval before it is added.
-- Not included: full-database encryption, key rotation tooling, scheduled backups, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
+- Not included: full-database encryption, key rotation tooling, scheduled backups, live weather, Kindle device support, a bundled HTTPS proxy, production hosting, and any on-device software.
 
 For execution priorities and gates see `MASTER_PLAN_V2.md`. The read-only hardware checklist is in `docs/HARDWARE_AUDIT_CHECKLIST.md`. The original detailed plan is preserved in `docs/ORIGINAL_MASTER_PLAN.md`.
 

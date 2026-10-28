@@ -2,7 +2,7 @@ import http.client
 import json
 import threading
 from unittest.mock import patch
-from app import render, server
+from app import auth, render, server, store
 from test_e2e import Served
 
 
@@ -49,9 +49,12 @@ class FrameHTTPTest(Served):
 
  def test_failed_first_frame_returns_503_and_cannot_bypass_auth(self):
   self.get_frame()
-  other = self.sign_in('mallory', 'another long pass')
-  self.httpd.frame_service.path(2).unlink(missing_ok=True)
-  self.headers = other
+  # A household created now cannot have been rendered by the start-up worker pass, so it has no cached frame.
+  conn = store.connect(self.db)
+  new = store.create_household(conn, 'Fresh')
+  store.create_user(conn, new, 'trent', auth.hash_password('fresh long pass'), 'admin')
+  conn.close()
+  self.headers = self.sign_in('trent', 'fresh long pass')
   # Only Sam has a cached frame. Mallory must never receive it on a failure.
   with patch.object(render, 'png_bytes', side_effect=ValueError('render failed')):
    status, _, body = self.get_frame()

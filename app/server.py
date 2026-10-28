@@ -325,7 +325,15 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service, public_orig
  return Handler
 
 class QuietServer(ThreadingHTTPServer):
+ workers_done = None
+
+ def shutdown(self):
+  # Return only once the background workers have stopped, so callers can safely remove the data directory.
+  super().shutdown()
+  if self.workers_done is not None: self.workers_done.wait()
+
  def serve_forever(self, poll_interval=0.5):
+  self.workers_done = threading.Event()
   stop = threading.Event()
   workers = [threading.Thread(target=service.run, args=(stop,), daemon=True)
              for service in (self.frame_service, self.calendar_service)]
@@ -335,6 +343,7 @@ class QuietServer(ThreadingHTTPServer):
   finally:
    stop.set()
    for worker in workers: worker.join()
+   self.workers_done.set()
 
  def handle_error(self, request, client_address):
   # A browser cancelling an image request mid-download is normal; do not print a traceback for it.
