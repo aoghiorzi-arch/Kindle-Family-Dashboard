@@ -139,7 +139,8 @@ function tokenRow(token) {
   const li = document.createElement('li');
   const used = token.last_used_at ? new Date(token.last_used_at * 1000).toLocaleDateString() : 'never used';
   const state = token.revoked ? 'revoked' : `last used ${used}`;
-  li.append(text('span', `${token.name} · ${state}`));
+  const kind = token.scopes === 'display:read' ? 'display' : 'shortcut';
+  li.append(text('span', `${token.name} · ${kind} · ${state}`));
   if (!token.revoked) {
     const revoke = text('button', 'Revoke', 'link danger');
     revoke.onclick = () => act(`/api/tokens/${token.id}/revoke`);
@@ -233,7 +234,7 @@ $('locationForm').addEventListener('submit', async e => {
 $('tokenForm').addEventListener('submit', async e => {
   e.preventDefault();
   try {
-    const j = await call('/api/tokens', {method: 'POST', body: {name: $('tokenName').value}});
+    const j = await call('/api/tokens', {method: 'POST', body: {name: $('tokenName').value, kind: $('tokenKind').value}});
     $('tokenValue').textContent = j.token;
     $('newToken').hidden = false;
     $('tokenName').value = '';

@@ -3,7 +3,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse
 from pathlib import Path
-import json, re, sys, time, threading, sqlite3
+import ipaddress, json, os, re, sys, time, threading, sqlite3
 from . import store, auth, weather, validate, ics, feeds, frames, calendars, secrets as storage_secrets
 
 ROOT = Path(__file__).resolve().parent
@@ -13,6 +13,9 @@ APP_JS = (ROOT/'static'/'app.js').read_bytes()
 COOKIE = 'kfd_session'
 SESSION_SECONDS = 14*86400
 SHORTCUT_SCOPE = 'shopping:add'  # the only scope a Shortcuts token can get
+DISPLAY_SCOPE = 'display:read'  # the only scope a display token can get: read this household's frame
+TOKEN_SCOPES = {'shortcut': SHORTCUT_SCOPE, 'display': DISPLAY_SCOPE}
+DISPLAY_FRAME_PATH = '/api/display/frame.png'
 ITEM_ROUTE = re.compile(r'^/api/(shopping|events)/(\d+)/(toggle|delete)$')
 TOKEN_REVOKE = re.compile(r'^/api/tokens/(\d+)/revoke$')
 FEED_ROUTE = re.compile(r'^/api/feeds/(\d+)/(refresh|delete|schedule)$')
@@ -26,13 +29,30 @@ SECURITY_HEADERS = {
  'Cache-Control': 'no-store',
 }
 
-def session_cookie(token):
- return f'{COOKIE}={token}; Max-Age={SESSION_SECONDS}; Path=/; HttpOnly; SameSite=Strict'
+def session_cookie(token, secure=False):
+ return f'{COOKIE}={token}; Max-Age={SESSION_SECONDS}; Path=/; HttpOnly; SameSite=Strict' + ('; Secure' if secure else '')
 
-def clear_cookie():
- return f'{COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict'
+def clear_cookie(secure=False):
+ return f'{COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict' + ('; Secure' if secure else '')
 
-def make_handler(db_path, limiter, provider, fetcher, frame_service):
+def is_loopback(host):
+ try: return ipaddress.ip_address(host).is_loopback
+ except ValueError: return False
+
+def parse_public_origin(value):
+ """Validate the externally visible HTTPS origin used behind a TLS-terminating proxy; returns (origin, host:port)."""
+ parsed = urlparse(value)
+ try: port = parsed.port
+ except ValueError: port = None
+ if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
+     or parsed.path not in ('', '/') or parsed.params or parsed.query or parsed.fragment):
+  raise ValueError('KFD_PUBLIC_ORIGIN must be a bare https:// origin such as https://hub.home.arpa:8443')
+ return f'https://{parsed.netloc}', parsed.netloc
+
+def make_handler(db_path, limiter, provider, fetcher, frame_service, public_origin=None):
+ secure = public_origin is not None
+ origin, public_host = public_origin if secure else (None, None)
+
  class Handler(BaseHTTPRequestHandler):
   server_version = 'FamilyHub'
 
@@ -43,7 +63,8 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
    self.send_response(status)
    self.send_header('Content-Type', ctype)
    self.send_header('Content-Length', str(len(body)))
-   for name, value in {**SECURITY_HEADERS, **(extra or {})}.items():
+   headers = {**SECURITY_HEADERS, **({'Strict-Transport-Security': 'max-age=31536000'} if secure else {}), **(extra or {})}
+   for name, value in headers.items():
     self.send_header(name, value)
    self.end_headers()
    self.wfile.write(body)
@@ -62,10 +83,20 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
    if not isinstance(payload, dict): raise ValueError('Body must be a JSON object')
    return payload
 
+  def expected_origin(self):
+   return origin if secure else f"http://{self.headers.get('Host')}"
+
+  def host_allowed(self):
+   # Refuse unexpected Host values (DNS rebinding). Behind a proxy only the public host is valid.
+   host = (self.headers.get('Host') or '').lower()
+   if secure: return host == public_host.lower()
+   port = self.server.server_address[1]
+   return host in (f'127.0.0.1:{port}', f'localhost:{port}', f'[::1]:{port}')
+
   def same_origin(self):
    # Browsers send Origin on cross-site POSTs; refuse any that do not match this server.
-   origin = self.headers.get('Origin')
-   return origin is None or origin == f"http://{self.headers.get('Host')}"
+   sent = self.headers.get('Origin')
+   return sent is None or sent == self.expected_origin()
 
   def current(self, conn):
    morsel = SimpleCookie(self.headers.get('Cookie', '')).get(COOKIE)
@@ -73,6 +104,9 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
 
   def do_GET(self):
    path = urlparse(self.path).path
+   if not self.host_allowed(): return self.send_error_json(421, 'Unexpected host')
+   if path == '/healthz': return self.health()
+   if path == DISPLAY_FRAME_PATH: return self.display_frame()
    if path == '/': return self.send_bytes(200, INDEX, 'text/html; charset=utf-8')
    if path == '/static/app.js': return self.send_bytes(200, APP_JS, 'application/javascript; charset=utf-8')
    conn = None
@@ -82,22 +116,52 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
     if user is None: return self.send_error_json(401, 'Sign in required')
     if path == '/api/state': return self.send_json(200, self.state(conn, user))
     if path == '/frame.png':
-     hh = user['household_id']
-     frame = frame_service.refresh(conn, hh)
-     if frame is None: return self.send_error_json(503, 'Preview unavailable. Please try again shortly.')
-     body, digest, stale = frame
-     extra = {'ETag': f'"{digest}"', 'X-Frame-Stale': 'true' if stale else 'false'}
-     if self.headers.get('If-None-Match') == extra['ETag']:
-      return self.send_bytes(304, b'', 'image/png', extra)
-     return self.send_bytes(200, body, 'image/png', extra)
+     return self.frame_response(conn, user['household_id'], 'Preview unavailable. Please try again shortly.')
     return self.send_bytes(404, b'Not found', 'text/plain; charset=utf-8')
    except storage_secrets.StorageError:
     return self.send_error_json(503, 'Calendar storage unavailable; ask the administrator to check the server key.')
    finally:
     if conn is not None: conn.close()
 
+  def frame_response(self, conn, household_id, unavailable='Frame unavailable'):
+   frame = frame_service.refresh(conn, household_id)
+   if frame is None: return self.send_error_json(503, unavailable)
+   body, digest, stale = frame
+   extra = {'ETag': f'"{digest}"', 'X-Frame-Stale': 'true' if stale else 'false'}
+   if self.headers.get('If-None-Match') == extra['ETag']:
+    return self.send_bytes(304, b'', 'image/png', extra)
+   return self.send_bytes(200, body, 'image/png', extra)
+
+  def display_frame(self):
+   """Read-only image endpoint for the display. Bearer token only: never a cookie, never in the URL."""
+   header = self.headers.get('Authorization', '')
+   token = header[7:] if header.startswith('Bearer ') else ''
+   conn = None
+   try:
+    conn = store.connect(db_path)
+    row = store.api_token_for_use(conn, token)
+    if row is None: return self.send_error_json(401, 'Invalid or revoked token')
+    if DISPLAY_SCOPE not in row['scopes'].split(','): return self.send_error_json(403, 'Token lacks display:read')
+    return self.frame_response(conn, row['household_id'])
+   except storage_secrets.StorageError:
+    return self.send_error_json(503, 'Frame unavailable')
+   finally:
+    if conn is not None: conn.close()
+
+  def health(self):
+   conn = None
+   try:
+    conn = store.connect(db_path)
+    conn.execute('SELECT 1 FROM households LIMIT 1').fetchall()
+    return self.send_json(200, {'ok': True})
+   except Exception:
+    return self.send_json(503, {'ok': False})
+   finally:
+    if conn is not None: conn.close()
+
   def do_POST(self):
    path = urlparse(self.path).path
+   if not self.host_allowed(): return self.send_error_json(421, 'Unexpected host')
    conn = None
    try:
     conn = store.connect(db_path)
@@ -133,12 +197,12 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
     return self.send_error_json(401, 'Username or password is incorrect')
    limiter.reset(key)
    token, csrf = store.create_session(conn, user['id'], SESSION_SECONDS)
-   return self.send_json(200, {'user': user['username'], 'csrf': csrf}, {'Set-Cookie': session_cookie(token)})
+   return self.send_json(200, {'user': user['username'], 'csrf': csrf}, {'Set-Cookie': session_cookie(token, secure)})
 
   def logout(self, conn):
    morsel = SimpleCookie(self.headers.get('Cookie', '')).get(COOKIE)
    if morsel: store.delete_session(conn, morsel.value)
-   return self.send_json(200, {'ok': True}, {'Set-Cookie': clear_cookie()})
+   return self.send_json(200, {'ok': True}, {'Set-Cookie': clear_cookie(secure)})
 
   def shortcut(self, conn, path, payload):
    """Bearer-token routes for Apple Shortcuts. Cookies and CSRF do not apply: the token is sent explicitly."""
@@ -200,9 +264,11 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
     return self.send_json(200, {'ok': True})
    if path == '/api/tokens':
     name = validate.clean_title(payload.get('name'), limit=40)
-    token = store.create_api_token(conn, hh, uid, name, [SHORTCUT_SCOPE])
+    kind = payload.get('kind', 'shortcut')
+    if kind not in TOKEN_SCOPES: raise ValueError('Token kind must be shortcut or display')
+    token = store.create_api_token(conn, hh, uid, name, [TOKEN_SCOPES[kind]])
     # The plain token is returned only here; it cannot be shown again.
-    return self.send_json(201, {'token': token, 'name': name, 'scope': SHORTCUT_SCOPE})
+    return self.send_json(201, {'token': token, 'name': name, 'scope': TOKEN_SCOPES[kind]})
    if path == '/api/calendar':
     if store.get_location(conn, hh) is None:
      raise ValueError('Set the location first, so event times match your time zone')
@@ -259,7 +325,15 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
  return Handler
 
 class QuietServer(ThreadingHTTPServer):
+ workers_done = None
+
+ def shutdown(self):
+  # Return only once the background workers have stopped, so callers can safely remove the data directory.
+  super().shutdown()
+  if self.workers_done is not None: self.workers_done.wait()
+
  def serve_forever(self, poll_interval=0.5):
+  self.workers_done = threading.Event()
   stop = threading.Event()
   workers = [threading.Thread(target=service.run, args=(stop,), daemon=True)
              for service in (self.frame_service, self.calendar_service)]
@@ -269,17 +343,21 @@ class QuietServer(ThreadingHTTPServer):
   finally:
    stop.set()
    for worker in workers: worker.join()
+   self.workers_done.set()
 
  def handle_error(self, request, client_address):
   # A browser cancelling an image request mid-download is normal; do not print a traceback for it.
   if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)): return
   super().handle_error(request, client_address)
 
-def make_server(db_path, port=8765, host='127.0.0.1', provider=None, fetcher=None, clock=time.time):
+def make_server(db_path, port=8765, host='127.0.0.1', provider=None, fetcher=None, clock=time.time, public_origin=None):
+ # The app speaks plain HTTP, so it only ever listens on loopback. Network access goes through a TLS proxy.
+ if not is_loopback(host): raise ValueError('The server listens on loopback only; use a TLS proxy for network access')
+ public = parse_public_origin(public_origin) if public_origin else None
  provider = provider or weather.FakeProvider(FIXTURE['weather'])
  fetcher = fetcher or feeds.fetch_https
  frame_service = frames.FrameService(db_path, provider, clock)
- server = QuietServer((host, port), make_handler(db_path, auth.LoginLimiter(), provider, fetcher, frame_service))
+ server = QuietServer((host, port), make_handler(db_path, auth.LoginLimiter(), provider, fetcher, frame_service, public))
  server.frame_service = frame_service
  server.calendar_service = calendars.CalendarService(db_path, fetcher, clock)
  return server
@@ -290,9 +368,15 @@ def main():
   store.init_db(db_path)
  except storage_secrets.StorageError as exc:
   sys.exit(str(exc))
- port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
- server = make_server(db_path, port)
- print(f'Family Hub (local only): http://127.0.0.1:{port} — database {db_path} (Ctrl-C to stop)', flush=True)
+ try:
+  port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get('KFD_PORT', 8765))
+  host = os.environ.get('KFD_HOST', '127.0.0.1')
+  public = os.environ.get('KFD_PUBLIC_ORIGIN') or None
+  server = make_server(db_path, port, host, public_origin=public)
+ except (ValueError, OSError) as exc:
+  sys.exit(str(exc))
+ where = f'public {public} via proxy' if public else 'local only'
+ print(f'Family Hub ({where}): listening on http://{host}:{port} — database {db_path} (Ctrl-C to stop)', flush=True)
  server.serve_forever()
 
 if __name__ == '__main__':

@@ -18,8 +18,8 @@
 <h3>Calendar feeds</h3><p class="sub">Read-only https calendar links (for example, a shared family calendar). Only today’s events are shown. Feed addresses are secret: they are never shown again after saving. Up to three feeds. Use Enable automatic refresh to check a feed every 30 minutes while the server runs; Pause stops future checks.</p>
 <form id="feedForm"><input id="feedLabel" maxlength="40" placeholder="Label (e.g. Family calendar)" required aria-label="Feed label"><input id="feedUrl" type="url" placeholder="https://… (.ics address)" required aria-label="Feed address"><button>Add feed</button></form>
 <ul id="feeds"></ul>
-<h3>Shortcuts tokens</h3><p class="sub">A token lets an iPhone Shortcut add shopping items. It cannot read anything or change other things, and you can revoke it at any time.</p>
-<form id="tokenForm"><input id="tokenName" maxlength="40" placeholder="Token name" required aria-label="Token name"><button>Create token</button></form>
+<h3>Tokens</h3><p class="sub">A Shortcut token lets an iPhone add shopping items. A Display token lets a screen download the picture only. Neither can read or change anything else, and you can revoke either at any time.</p>
+<form id="tokenForm"><input id="tokenName" maxlength="40" placeholder="Token name" required aria-label="Token name"><select id="tokenKind" aria-label="Token type"><option value="shortcut">Shortcut (add shopping)</option><option value="display">Display (read picture only)</option></select><button>Create token</button></form>
 <div id="newToken" class="token" hidden><p>Copy this token now. It will not be shown again:</p><code id="tokenValue"></code></div>
 <ul id="tokens"></ul>
 </div>

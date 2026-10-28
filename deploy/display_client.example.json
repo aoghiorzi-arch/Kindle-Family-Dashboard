@@ -1,0 +1,7 @@
+{
+  "server_url": "https://hub.home.arpa:8443",
+  "token_file": "/path/to/display.token",
+  "cache_dir": "/path/to/display-cache",
+  "interval": 300,
+  "ca_file": null
+}
