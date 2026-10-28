@@ -1,0 +1,21 @@
+# TLS proxy for a supervised home-network pilot. The app itself stays on 127.0.0.1:8765.
+# Replace hub.home.arpa with the name your phone resolves to this computer (router DNS entry or /etc/hosts-style override).
+# `tls internal` makes Caddy sign with its own local CA; each phone/Kindle must trust that CA certificate (see docs/NETWORK_PILOT.md).
+{
+	auto_https disable_redirects
+}
+
+hub.home.arpa:8443 {
+	tls internal
+	# Only the LAN may connect; edit to match your network, e.g. 192.168.1.0/24.
+	@outside not remote_ip private_ranges
+	respond @outside 403
+	# Never log request headers (they carry the display token or session cookie).
+	log {
+		output file /var/log/caddy/kfd-access.log
+		format filter {
+			request>headers delete
+		}
+	}
+	reverse_proxy 127.0.0.1:8765
+}
