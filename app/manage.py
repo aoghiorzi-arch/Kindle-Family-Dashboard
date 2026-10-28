@@ -3,10 +3,12 @@
   python3 -m app.manage add-user USERNAME [--admin]   # first user in a household is always an admin
   python3 -m app.manage seed-demo                     # fills an empty household with sample items
   python3 -m app.manage set-location LAT LON TIMEZONE # e.g. 51.5074 -0.1278 Europe/London
+  python3 -m app.manage refresh-feeds                 # re-downloads every calendar feed (schedule this to run)
 """
 from pathlib import Path
 import getpass, json, sys
-from . import store, auth, validate
+from . import store, auth, validate, feeds
+import time
 
 def open_db():
  store.init_db(store.default_db_path())
@@ -53,6 +55,20 @@ def seed_demo():
   conn.close()
  print('Sample shopping and events added.')
 
+def refresh_feeds():
+ conn = open_db()
+ try:
+  household = store.first_household_id(conn)
+  if household is None: sys.exit('Add a user first: python3 -m app.manage add-user USERNAME')
+  location = store.get_location(conn, household)
+  if location is None: sys.exit('Set the location first: python3 -m app.manage set-location LAT LON TIMEZONE')
+  for feed in store.list_feeds(conn, household):
+   ok, error = feeds.refresh(conn, household, store.get_feed(conn, household, feed['id']),
+    feeds.fetch_https, location['tz'], int(time.time()))
+   print(f"{feed['label']}: " + ('updated' if ok else f'failed ({error})'))
+ finally:
+  conn.close()
+
 def set_location(lat, lon, tz):
  try:
   lat, lon, tz = validate.clean_location(lat, lon, tz)
@@ -73,6 +89,8 @@ if __name__ == '__main__':
   add_user(args[1], admin=len(args) == 3)
  elif args == ['seed-demo']:
   seed_demo()
+ elif args == ['refresh-feeds']:
+  refresh_feeds()
  elif args[:1] == ['set-location'] and len(args) == 4:
   set_location(*args[1:4])
  else:

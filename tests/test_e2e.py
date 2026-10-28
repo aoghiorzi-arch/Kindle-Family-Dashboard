@@ -9,11 +9,19 @@ from pathlib import Path
 from unittest.mock import patch
 from PIL import ImageDraw
 from app import server, store, auth, weather
+from zoneinfo import ZoneInfo
+from datetime import datetime
 from app.render import png_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads((ROOT/'app'/'seed.json').read_text())
 PASSWORD = 'family-demo-pass'
+
+def fake_feed(url):
+ """Stands in for the network: a calendar with one event today (London time) and one private event."""
+ day = datetime.now(ZoneInfo('Europe/London')).date().strftime('%Y%m%d')
+ return '\r\n'.join(['BEGIN:VCALENDAR', f'BEGIN:VEVENT\r\nUID:e2e-1\r\nDTSTART:{day}T100000Z\r\nSUMMARY:Football\r\nEND:VEVENT',
+  f'BEGIN:VEVENT\r\nUID:e2e-2\r\nDTSTART:{day}T130000Z\r\nSUMMARY:Hospital\r\nCLASS:PRIVATE\r\nEND:VEVENT', 'END:VCALENDAR'])
 
 class Served(unittest.TestCase):
  def serve(self):
@@ -26,7 +34,7 @@ class Served(unittest.TestCase):
   other = store.create_household(conn, 'Other')
   store.create_user(conn, other, 'mallory', auth.hash_password('another long pass'), 'admin')
   conn.close()
-  self.httpd = server.make_server(self.db, port=0)
+  self.httpd = server.make_server(self.db, port=0, fetcher=fake_feed)
   self.port = self.httpd.server_address[1]
   threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
   self.addCleanup(self.stop)

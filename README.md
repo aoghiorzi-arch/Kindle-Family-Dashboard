@@ -56,9 +56,16 @@ The end-to-end tests (`tests/test_e2e.py`) check that a phone edit changes the n
 - Sunset: computed from the household location and time zone when set (`set-location`). Without a location, the fixture value is used.
 - Admin settings (admins only): add members with a role (member or admin), set the location for sunset, and create or revoke Shortcuts tokens. The first member of a household is an admin. Use `add-user NAME --admin` to add another admin from the command line.
 - Family calendar (admins only): paste an `.ics` export in Household settings. The server never fetches a URL. Only today's events are shown, in the household's time zone. Recurring events are skipped, and the import reports how many. Private events show as "Busy". Imported events can be removed at any time.
+- Calendar feeds (admins only, up to three): add a read-only `https://` calendar address in Household settings, or refresh one by hand. The server downloads it, and only today's events are shown. Protections:
+  - https only, standard port, no login in the address, no redirects followed;
+  - the host must resolve to a public address, and the connection is made to that exact address;
+  - responses are limited to 2 MB and 10 seconds;
+  - feed addresses are never shown again after saving (the phone shows only the host) and never appear in error messages.
+  - Refresh runs when you press Refresh, or with `python3 -m app.manage refresh-feeds`. The display never fetches. Schedule that command for automatic refresh once the machine is set up.
+  - Feed addresses are stored in the local database as plain text. Encrypt them at rest before any deployment.
 - Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked.
 - Daily thought: a King James Version verse chosen by date (the same verse all day), bundled in `app/content.py`. No network calls. Check each verse against a printed Bible before it goes on a family display.
 - A real weather provider makes external network calls and needs separate approval before it is added.
-- Not included: calendar URL subscriptions (needs separate approval), recurring-event expansion, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
+- Not included: recurring-event expansion, automatic feed scheduling, encryption of stored feed addresses, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
 
 For execution priorities and gates see `MASTER_PLAN_V2.md`. The read-only hardware checklist is in `docs/HARDWARE_AUDIT_CHECKLIST.md`. The original detailed plan is preserved in `docs/ORIGINAL_MASTER_PLAN.md`.

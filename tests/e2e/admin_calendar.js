@@ -93,6 +93,16 @@ async function shortcutStatus(page, token) {
     await page.click('#calendarClear button');
     await page.waitForSelector('#calendarStatus:has-text("No calendar imported")');
 
+    // Calendar feed: add one (the test server answers without the network), check it, then remove it.
+    await page.fill('#feedLabel', 'Family');
+    await page.fill('#feedUrl', 'https://calendar.example.test/family.ics');
+    await page.click('#feedForm button');
+    await page.waitForSelector('#status:has-text("Feed added and synced")');
+    check((await page.textContent('#feeds li')).includes('calendar.example.test'), 'feed host was not shown');
+    check(!(await page.textContent('#feeds')).includes('family.ics'), 'feed address was shown in full');
+    await page.locator('#feeds li', {hasText: 'Family'}).getByRole('button', {name: 'Remove'}).click();
+    await page.waitForSelector('#feeds li:has-text("Family")', {state: 'detached'});
+
     // A member signs in: no admin panel is shown.
     await page.click('#logout');
     await page.waitForSelector('#loginForm');

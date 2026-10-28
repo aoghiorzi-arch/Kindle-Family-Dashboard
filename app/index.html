@@ -15,6 +15,9 @@
 <form id="calendarForm"><textarea id="ics" rows="4" placeholder="Paste .ics text here" required aria-label="Calendar .ics text"></textarea><button>Import calendar</button></form>
 <p id="calendarStatus" class="sub" role="status" aria-live="polite"></p>
 <form id="calendarClear"><button class="link danger" type="submit">Remove imported calendar</button></form>
+<h3>Calendar feeds</h3><p class="sub">Read-only https calendar links (for example, a shared family calendar). Only today’s events are shown. Feed addresses are secret: they are never shown again after saving. Up to three feeds.</p>
+<form id="feedForm"><input id="feedLabel" maxlength="40" placeholder="Label (e.g. Family calendar)" required aria-label="Feed label"><input id="feedUrl" type="url" placeholder="https://… (.ics address)" required aria-label="Feed address"><button>Add feed</button></form>
+<ul id="feeds"></ul>
 <h3>Shortcuts tokens</h3><p class="sub">A token lets an iPhone Shortcut add shopping items. It cannot read anything or change other things, and you can revoke it at any time.</p>
 <form id="tokenForm"><input id="tokenName" maxlength="40" placeholder="Token name" required aria-label="Token name"><button>Create token</button></form>
 <div id="newToken" class="token" hidden><p>Copy this token now. It will not be shown again:</p><code id="tokenValue"></code></div>

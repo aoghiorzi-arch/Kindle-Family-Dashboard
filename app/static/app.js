@@ -61,6 +61,26 @@ function memberRow(member) {
   return text('li', `${member.username} · ${member.role}`);
 }
 
+function feedRow(feed) {
+  const li = document.createElement('li');
+  let status = 'not synced yet';
+  if (feed.last_error) status = `failed: ${feed.last_error}`;
+  else if (feed.last_success) status = `synced ${new Date(feed.last_success * 1000).toLocaleString()}`;
+  li.append(text('span', `${feed.label} · ${feed.host} · ${status}`));
+  const refreshButton = text('button', 'Refresh', 'link');
+  refreshButton.onclick = async () => {
+    try {
+      const j = await call(`/api/feeds/${feed.id}/refresh`, {method: 'POST', body: {}});
+      message(j.ok ? 'Feed refreshed.' : `Feed failed: ${j.error}`, !j.ok);
+      await refresh();
+    } catch (e) { handleError(e); }
+  };
+  const remove = text('button', 'Remove', 'link danger');
+  remove.onclick = () => act(`/api/feeds/${feed.id}/delete`, {}, 'Feed removed.');
+  li.append(refreshButton, remove);
+  return li;
+}
+
 function tokenRow(token) {
   const li = document.createElement('li');
   const used = token.last_used_at ? new Date(token.last_used_at * 1000).toLocaleDateString() : 'never used';
@@ -85,6 +105,7 @@ async function refresh() {
   if (isAdmin) {
     $('members').replaceChildren(...s.members.map(memberRow));
     $('tokens').replaceChildren(...s.tokens.map(tokenRow));
+    $('feeds').replaceChildren(...s.feeds.map(feedRow));
     $('calendarStatus').textContent = s.calendar.events ? `${s.calendar.events} imported events in the calendar.` : 'No calendar imported.';
     if (s.location) {
       $('lat').value = s.location.lat;
@@ -180,6 +201,17 @@ $('calendarForm').addEventListener('submit', async e => {
 $('calendarClear').addEventListener('submit', async e => {
   e.preventDefault();
   await act('/api/calendar/clear', {}, 'Imported calendar removed.');
+});
+
+$('feedForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  try {
+    const j = await call('/api/feeds', {method: 'POST', body: {label: $('feedLabel').value, url: $('feedUrl').value}});
+    $('feedLabel').value = '';
+    $('feedUrl').value = '';
+    message(j.ok ? 'Feed added and synced.' : `Feed added, but it failed: ${j.error}`, !j.ok);
+    await refresh();
+  } catch (err) { handleError(err); }
 });
 
 refresh().catch(e => showLogin(e.status === 401 ? '' : e.message));
