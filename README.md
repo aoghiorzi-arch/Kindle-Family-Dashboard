@@ -8,6 +8,7 @@ A **local-only** prototype of the family display and its phone editor. No Kindle
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
+python3 -m app.manage init-db          # offline initialization/calendar-storage migration
 
 # One-time setup: create the household and its members (you will be asked for passwords)
 python3 -m app.manage add-user sam
@@ -22,6 +23,8 @@ Open **http://127.0.0.1:8765**, sign in, and edit the shopping list or events. T
 
 The database is `data/family.sqlite3` (git-ignored). Verified per-household frames are saved in `data/family.sqlite3.frames/` beside it. Treat both as private household data; neither is a public static directory. Override the location with `KFD_DB=/path/to/file.sqlite3`.
 
+Calendar feed addresses and cached `.ics` source text are encrypted using a separate owner-only key file, defaulting to `data/family.sqlite3.key`. Preserve this key: a database copy alone cannot recover these fields. Set `KFD_KEY_FILE` to a protected path outside the application/data backup directory for separate key custody. The app creates a key on first initialization, but never replaces a missing key for an encrypted database. Stop all Family Hub processes before upgrading/migrating. See [`docs/CALENDAR_STORAGE.md`](docs/CALENDAR_STORAGE.md) for migration, key handling and remaining protection limits.
+
 **Do not expose this server to a LAN or the internet.** It binds to loopback and serves plain HTTP, so it has no transport encryption. Session cookies are `HttpOnly` and `SameSite=Strict`, but the `Secure` flag is omitted until HTTPS exists.
 
 ## Security in this prototype
@@ -32,6 +35,10 @@ The database is `data/family.sqlite3` (git-ignored). Verified per-household fram
 - Each household sees only its own shopping and events. Item IDs from another household return 404.
 - Responses carry a Content-Security-Policy, `X-Frame-Options: DENY` and `no-store`.
 - Private events display as **Busy** on the rendered frame.
+
+## Backup and recovery
+
+Use `python3 -m app.manage backup NEW_DIRECTORY` to create a verified database snapshot. Preserve its matching encryption key separately. Use `python3 -m app.manage restore BACKUP_DB NEW_DIRECTORY` with `KFD_KEY_FILE` pointing to that key; restore refuses existing destinations and clears browser sessions. See [`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md) for the recovery procedure.
 
 ## Render a standalone PNG
 
@@ -70,11 +77,11 @@ Complete, verified 600×800 PNGs are written to temporary files and atomically r
   - responses are limited to 2 MB and 10 seconds;
   - feed addresses are never shown again after saving (the phone shows only the host) and never appear in error messages.
   - Refresh runs when you press Refresh, or with `python3 -m app.manage refresh-feeds`. An admin can also enable automatic refresh per feed in Household settings: checks run every 30 minutes while the server runs, including after a failed attempt. Existing/new feeds default to manual; the choice and last attempt survive restarts. Pause stops future automatic downloads (an in-flight download may finish). The display never fetches. A separate calendar worker keeps slow downloads out of the frame renderer. Do not schedule the management command as well as the built-in worker.
-  - Feed addresses and cached source calendar text are stored in the local database as plain text. Protect the database and encrypt secrets before deployment. Sources are removed when their pasted import or feed is removed. Cached recurrence can roll forward locally even when a feed is unreachable; it reflects the last downloaded version, not live confirmation.
-- Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked.
+  - Feed addresses and cached source calendar text are encrypted at rest with a separate key. Parsed event records, feed labels and other household data remain ordinary SQLite fields; protect the entire database and saved frames. Sources are removed when their pasted import or feed is removed. Cached recurrence can roll forward locally even when a feed is unreachable; it reflects the last downloaded version, not live confirmation.
+- Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked. An optional `request_id` makes retries safe without suppressing deliberate repeat purchases.
 - Daily thought: a King James Version verse chosen by date (the same verse all day), bundled in `app/content.py`. No network calls. Check each verse against a printed Bible before it goes on a family display.
 - A real weather provider makes external network calls and needs separate approval before it is added.
-- Not included: encryption of stored feed addresses/calendar sources, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
+- Not included: full-database encryption, key rotation tooling, scheduled backups, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
 
 For execution priorities and gates see `MASTER_PLAN_V2.md`. The read-only hardware checklist is in `docs/HARDWARE_AUDIT_CHECKLIST.md`. The original detailed plan is preserved in `docs/ORIGINAL_MASTER_PLAN.md`.
 
