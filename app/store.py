@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
  household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
  username TEXT NOT NULL UNIQUE COLLATE NOCASE,
  password_hash TEXT NOT NULL,
+ role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member','admin')),
  created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
@@ -49,6 +50,17 @@ CREATE TABLE IF NOT EXISTS weather_cache (
  fetched_at INTEGER NOT NULL,
  payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS api_tokens (
+ id INTEGER PRIMARY KEY,
+ household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+ name TEXT NOT NULL,
+ token_hash TEXT NOT NULL UNIQUE,
+ scopes TEXT NOT NULL,
+ created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+ created_at INTEGER NOT NULL,
+ last_used_at INTEGER,
+ revoked_at INTEGER
+);
 CREATE INDEX IF NOT EXISTS shopping_household ON shopping(household_id);
 CREATE INDEX IF NOT EXISTS events_household ON events(household_id);
 """
@@ -66,7 +78,11 @@ def connect(path):
 def init_db(path):
  Path(path).parent.mkdir(parents=True, exist_ok=True)
  conn = connect(path)
- try: conn.executescript(SCHEMA)
+ try:
+  conn.executescript(SCHEMA)
+  # Databases created before roles existed get the column added in place.
+  if 'role' not in {r['name'] for r in conn.execute('PRAGMA table_info(users)')}:
+   conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'")
  finally: conn.close()
 
 def hash_token(token):
@@ -79,16 +95,19 @@ def first_household_id(conn):
 def create_household(conn, name):
  return conn.execute('INSERT INTO households(name) VALUES(?)', (name,)).lastrowid
 
-def create_user(conn, household_id, username, password_hash):
+def create_user(conn, household_id, username, password_hash, role='member'):
  try:
-  cur = conn.execute('INSERT INTO users(household_id,username,password_hash,created_at) VALUES(?,?,?,?)',
-   (household_id, username, password_hash, int(time.time())))
+  cur = conn.execute('INSERT INTO users(household_id,username,password_hash,role,created_at) VALUES(?,?,?,?,?)',
+   (household_id, username, password_hash, role, int(time.time())))
  except sqlite3.IntegrityError:
   raise ValueError('That username is already taken')
  return cur.lastrowid
 
 def get_user(conn, username):
- return conn.execute('SELECT id,household_id,username,password_hash FROM users WHERE username=?', (username,)).fetchone()
+ return conn.execute('SELECT id,household_id,username,password_hash,role FROM users WHERE username=?', (username,)).fetchone()
+
+def list_members(conn, household_id):
+ return conn.execute('SELECT id,username,role FROM users WHERE household_id=? ORDER BY id', (household_id,)).fetchall()
 
 def create_session(conn, user_id, max_age):
  now = int(time.time())
@@ -100,7 +119,7 @@ def create_session(conn, user_id, max_age):
 
 def session_user(conn, token):
  if not token: return None
- row = conn.execute('''SELECT u.id user_id, u.household_id, u.username, s.csrf_token csrf, s.expires_at
+ row = conn.execute('''SELECT u.id user_id, u.household_id, u.username, u.role, s.csrf_token csrf, s.expires_at
   FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?''', (hash_token(token),)).fetchone()
  if row is None: return None
  if row['expires_at'] <= int(time.time()):
@@ -110,6 +129,30 @@ def session_user(conn, token):
 
 def delete_session(conn, token):
  conn.execute('DELETE FROM sessions WHERE token_hash=?', (hash_token(token),))
+
+def create_api_token(conn, household_id, user_id, name, scopes):
+ """Returns the plain token once. Only its hash is stored."""
+ token = 'kfd_' + secrets.token_urlsafe(32)
+ conn.execute('INSERT INTO api_tokens(household_id,name,token_hash,scopes,created_by,created_at) VALUES(?,?,?,?,?,?)',
+  (household_id, name, hash_token(token), ','.join(scopes), user_id, int(time.time())))
+ return token
+
+def api_token_for_use(conn, token):
+ """The active token's household, scopes and creator, or None. Records the time of use."""
+ if not token: return None
+ row = conn.execute('SELECT id,household_id,scopes,created_by,revoked_at FROM api_tokens WHERE token_hash=?',
+  (hash_token(token),)).fetchone()
+ if row is None or row['revoked_at'] is not None: return None
+ conn.execute('UPDATE api_tokens SET last_used_at=? WHERE id=?', (int(time.time()), row['id']))
+ return row
+
+def list_api_tokens(conn, household_id):
+ return conn.execute('''SELECT id,name,scopes,created_at,last_used_at,revoked_at FROM api_tokens
+  WHERE household_id=? ORDER BY id''', (household_id,)).fetchall()
+
+def revoke_api_token(conn, household_id, token_id):
+ return conn.execute('UPDATE api_tokens SET revoked_at=? WHERE id=? AND household_id=? AND revoked_at IS NULL',
+  (int(time.time()), token_id, household_id)).rowcount == 1
 
 def list_shopping(conn, household_id):
  return conn.execute('SELECT id,title,done FROM shopping WHERE household_id=? ORDER BY id', (household_id,)).fetchall()

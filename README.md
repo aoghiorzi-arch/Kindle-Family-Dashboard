@@ -52,6 +52,8 @@ python3 -m unittest discover -s tests -v
 - Family Hub: SQLite storage, sign-in, one household with two member accounts, shopping (add, mark got, remove), events (add with optional time and private flag, remove).
 - Weather: server-side adapter with a 30-minute cache. The demo uses `FakeProvider` (fixed values from `app/seed.json`) only. Displays never call a weather service. If a refresh fails, the last good forecast is kept and shows "Updated N h ago" once it is over an hour old.
 - Sunset: computed from the household location and time zone when set (`set-location`). Without a location, the fixture value is used.
+- Admin settings (admins only): add members with a role (member or admin), set the location for sunset, and create or revoke Shortcuts tokens. The first member of a household is an admin. Use `add-user NAME --admin` to add another admin from the command line.
+- Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked.
 - Daily thought: a King James Version verse chosen by date (the same verse all day), bundled in `app/content.py`. No network calls. Check each verse against a printed Bible before it goes on a family display.
 - A real weather provider makes external network calls and needs separate approval before it is added.
 - Not included: calendar providers, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
