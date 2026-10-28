@@ -2,7 +2,7 @@
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 from datetime import datetime
-import hashlib, io, os, textwrap
+import hashlib, io, os, tempfile, textwrap
 
 W,H = 600,800
 STALE_MINUTES = 60  # weather older than this shows its age on the display
@@ -98,6 +98,22 @@ def render(data):
 def png_bytes(data):
  image=render(data); b=io.BytesIO();image.save(b,format='PNG',optimize=True,dpi=(DPI,DPI));return b.getvalue()
 
+def atomic_write(path, body):
+ """Publish complete frames only; a failed write leaves the previous frame intact."""
+ p = Path(path)
+ p.parent.mkdir(parents=True, exist_ok=True)
+ name = None
+ try:
+  with tempfile.NamedTemporaryFile(dir=p.parent, prefix='.frame-', delete=False) as f:
+   name = f.name
+   f.write(body)
+   f.flush()
+   os.fsync(f.fileno())
+  os.replace(name, p)
+ finally:
+  if name and os.path.exists(name): os.unlink(name)
+
 def save_frame(data,path):
- b=png_bytes(data); p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b)
+ b=png_bytes(data); p=Path(path);atomic_write(p,b)
  return {'path':str(p),'sha256':hashlib.sha256(b).hexdigest(),'bytes':len(b)}
+

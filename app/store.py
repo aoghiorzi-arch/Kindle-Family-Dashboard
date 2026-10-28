@@ -218,10 +218,11 @@ def get_weather(conn, household_id):
 def put_weather(conn, household_id, fetched_at, payload):
  conn.execute('INSERT OR REPLACE INTO weather_cache(household_id,fetched_at,payload) VALUES(?,?,?)', (household_id, fetched_at, payload))
 
-def household_today(conn, household_id):
+def household_today(conn, household_id, now=None):
  """Today's date in the household's time zone when a location is set, otherwise the server's date."""
  loc = get_location(conn, household_id)
- return datetime.now(ZoneInfo(loc['tz'])).date().isoformat() if loc else date.today().isoformat()
+ tz = ZoneInfo(loc['tz']) if loc else None
+ return (datetime.fromtimestamp(now, tz) if now is not None else datetime.now(tz)).date().isoformat()
 
 def replace_calendar(conn, household_id, rows):
  """Replaces the pasted calendar in one transaction. Manual events and feeds are not affected."""
@@ -304,3 +305,4 @@ def snapshot(conn, household_id, today, weather):
   'events': day_events(conn, household_id, today),
   'shopping': [{'title': r['title'], 'done': bool(r['done'])} for r in list_shopping(conn, household_id)],
  }
+

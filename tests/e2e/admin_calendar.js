@@ -39,7 +39,7 @@ async function shortcutStatus(page, token) {
 }
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({executablePath: process.env.E2E_CHROMIUM_EXECUTABLE_PATH || undefined});
   try {
     const page = await browser.newPage({viewport: {width: 390, height: 844}});
     const errors = [];
@@ -119,3 +119,4 @@ async function shortcutStatus(page, token) {
   console.error('FAILED:', e.message);
   process.exitCode = 1;
 });
+

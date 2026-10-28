@@ -18,9 +18,9 @@ python3 -m app.manage set-location 51.5074 -0.1278 Europe/London   # for a compu
 python3 -m app.server
 ```
 
-Open **http://127.0.0.1:8765**, sign in, and edit the shopping list or events. The preview regenerates after each successful edit.
+Open **http://127.0.0.1:8765**, sign in, and edit the shopping list or events. The preview updates after each successful edit and checks automatically every minute while the tab is visible. Returning to the tab or reconnecting also triggers a check. Failed updates keep the last displayed image; polling preserves unfinished form entries.
 
-The database is `data/family.sqlite3` (git-ignored). Override the location with `KFD_DB=/path/to/file.sqlite3`.
+The database is `data/family.sqlite3` (git-ignored). Verified per-household frames are saved in `data/family.sqlite3.frames/` beside it. Treat both as private household data; neither is a public static directory. Override the location with `KFD_DB=/path/to/file.sqlite3`.
 
 **Do not expose this server to a LAN or the internet.** It binds to loopback and serves plain HTTP, so it has no transport encryption. Session cookies are `HttpOnly` and `SameSite=Strict`, but the `Secure` flag is omitted until HTTPS exists.
 
@@ -47,7 +47,15 @@ The PNG carries 167 ppi metadata (Kindle Touch density), so printing at 100% sho
 python3 -m unittest discover -s tests -v
 ```
 
-The end-to-end tests (`tests/test_e2e.py`) check that a phone edit changes the next preview and that the preview matches the saved data. Two browser tests drive the real pages with Playwright: `tests/e2e/phone_edit.js` (shopping, private events, the preview) and `tests/e2e/admin_calendar.js` (members, location, calendar import and clear, Shortcuts tokens, the member view). They run when `node` and the `playwright` package are installed, and are skipped otherwise.
+The end-to-end tests (`tests/test_e2e.py`) check that a phone edit changes the next preview and that the preview matches the saved data. Three browser scripts drive the real pages with Playwright: `tests/e2e/phone_edit.js` (shopping, private events, the preview) and `tests/e2e/admin_calendar.js` (members, location, calendar import and clear, Shortcuts tokens, the member view). `tests/e2e/preview_refresh.js` checks automatic updates, form drafts, unchanged-frame responses, failure/recovery and sign-out. They run when `node` and the `playwright` package are installed, and are skipped otherwise. Chromium must also be installed (`node /path/to/playwright/cli.js install chromium`); an installed browser can be selected with `E2E_CHROMIUM_EXECUTABLE_PATH=/path/to/chrome-headless-shell`. Browser launch failures fail the test rather than silently skipping it.
+
+## Automatic frame lifecycle
+
+While the server runs, a background worker checks every household once a minute. Each check derives the current date in that household's time zone, selects today's imported events and daily verse, recalculates sunset, and refreshes the weather adapter when its 30-minute cache expires. It does **not** download calendar feeds; those still use manual refresh or the existing management command. The worker stops with the server.
+
+Complete, verified 600×800 PNGs are written to temporary files and atomically replaced. Identical PNGs keep their existing file and hash. If rendering or writing fails, `/frame.png` serves only that household's verified saved image with `X-Frame-Stale: true`; if none exists, it returns 503. A successful render clears the stale flag. Weather age is separate: a newly rendered screen can contain a visibly old weather forecast.
+
+`ETag` is the PNG's SHA-256 hash. Authenticated conditional requests return 304 when pixels are unchanged, avoiding image replacement in the preview. The browser decodes a replacement before showing it, retains the previous image on errors, and clears its private image on sign-out. This is a local simulator; no device polling/client is installed.
 
 ## Scope
 - Today renderer: 600×800 PNG, deterministic for the same input. Fonts are bundled in `app/fonts/` (Lato and Noto Serif, SIL Open Font License; see `app/fonts/OFL-Lato-NotoSerif.txt`).
@@ -69,3 +77,6 @@ The end-to-end tests (`tests/test_e2e.py`) check that a phone edit changes the n
 - Not included: recurring-event expansion, automatic feed scheduling, encryption of stored feed addresses, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
 
 For execution priorities and gates see `MASTER_PLAN_V2.md`. The read-only hardware checklist is in `docs/HARDWARE_AUDIT_CHECKLIST.md`. The original detailed plan is preserved in `docs/ORIGINAL_MASTER_PLAN.md`.
+
+
+Current implementation checklist: [`docs/PROGRESS.md`](docs/PROGRESS.md). Verification evidence: [`docs/VERIFICATION_2026-10-28.md`](docs/VERIFICATION_2026-10-28.md).

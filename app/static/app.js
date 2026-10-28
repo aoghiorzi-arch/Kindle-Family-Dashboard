@@ -1,6 +1,51 @@
 const $ = id => document.getElementById(id);
 let csrf = '';
 let isAdmin = false;
+let previewURL = '';
+let previewETag = '';
+let previewVersion = 0;
+let previewBusy = false;
+
+async function refreshPreview() {
+  const version = ++previewVersion;
+  try {
+    const r = await fetch('/frame.png', {
+      credentials: 'same-origin', cache: 'no-store',
+      headers: previewETag ? {'If-None-Match': previewETag} : {}
+    });
+    if (version !== previewVersion) return;
+    if (r.status === 401) { showLogin('Please sign in again.'); return; }
+    if (r.status !== 304 && !r.ok) throw new Error('Preview unavailable');
+    const stale = r.headers.get('X-Frame-Stale') === 'true';
+    if (r.status !== 304) {
+      const url = URL.createObjectURL(await r.blob());
+      try {
+        const image = new Image();
+        image.src = url;
+        await image.decode();
+        if (version !== previewVersion) { URL.revokeObjectURL(url); return; }
+        const previous = previewURL;
+        $('screen').src = url;
+        previewURL = url;
+        previewETag = r.headers.get('ETag') || '';
+        if (previous) URL.revokeObjectURL(previous);
+      } catch (e) { URL.revokeObjectURL(url); throw e; }
+    }
+    $('previewStatus').textContent = stale
+      ? 'Showing the last saved preview. Retrying automatically.'
+      : 'Preview checks every minute · Not connected to a Kindle';
+  } catch (e) {
+    if (version === previewVersion) $('previewStatus').textContent = previewURL
+      ? 'Connection or preview unavailable. Keeping the last image and retrying.'
+      : 'Preview unavailable. Retrying automatically.';
+  }
+}
+
+async function checkPreview() {
+  if ($('app').hidden || document.hidden || previewBusy) return;
+  previewBusy = true;
+  try { await refreshPreview(); } finally { previewBusy = false; }
+}
 
 async function call(path, {method = 'GET', body} = {}) {
   const headers = {'Content-Type': 'application/json'};
@@ -24,6 +69,11 @@ function message(value, isError = false) {
 }
 
 function showLogin(note = '') {
+  ++previewVersion;
+  $('screen').removeAttribute('src');
+  if (previewURL) URL.revokeObjectURL(previewURL);
+  previewURL = '';
+  previewETag = '';
   $('app').hidden = true;
   $('account').hidden = true;
   $('login').hidden = false;
@@ -113,10 +163,10 @@ async function refresh() {
       $('tz').value = s.location.tz;
     }
   }
-  $('screen').src = '/frame.png?t=' + Date.now();
   $('login').hidden = true;
   $('app').hidden = false;
   $('account').hidden = false;
+  await refreshPreview();
 }
 
 async function act(path, body = {}, done = 'Saved. Preview updated.') {
@@ -215,3 +265,7 @@ $('feedForm').addEventListener('submit', async e => {
 });
 
 refresh().catch(e => showLogin(e.status === 401 ? '' : e.message));
+setInterval(checkPreview, 60_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkPreview(); });
+window.addEventListener('online', checkPreview);
+
