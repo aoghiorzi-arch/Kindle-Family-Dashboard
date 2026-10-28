@@ -62,7 +62,7 @@ async function shortcutStatus(page, token) {
     await page.click('#locationForm button');
     await page.waitForSelector('#status:has-text("Location saved")');
 
-    // Calendar: import one private event for today and one recurring event (which is skipped).
+    // Calendar: import one private event for today and one recurring daily event.
     const before = await frame();
     const day = londonDayStamp();
     const ics = [
@@ -74,7 +74,7 @@ async function shortcutStatus(page, token) {
     await page.fill('#ics', ics);
     await page.click('#calendarForm button');
     await page.waitForSelector('#status:has-text("Calendar imported")');
-    check((await page.textContent('#status')).includes('Calendar imported: 1 events. 1 recurring'),
+    check((await page.textContent('#status')).includes('Calendar imported: 32 occurrences. 0 unsupported'),
       'calendar import summary was not shown');
     check(!before.equals(await frame()), 'importing today\'s calendar did not change the preview');
 
@@ -100,6 +100,13 @@ async function shortcutStatus(page, token) {
     await page.waitForSelector('#status:has-text("Feed added and synced")');
     check((await page.textContent('#feeds li')).includes('calendar.example.test'), 'feed host was not shown');
     check(!(await page.textContent('#feeds')).includes('family.ics'), 'feed address was shown in full');
+    await page.locator('#feeds li', {hasText: 'Family'}).getByRole('button', {name: 'Enable automatic refresh'}).click();
+    await page.waitForSelector('#feeds li:has-text("automatic every 30 minutes")');
+    check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'feed controls overflowed the phone viewport');
+    await page.reload();
+    await page.waitForSelector('#feeds li:has-text("automatic every 30 minutes")');
+    await page.locator('#feeds li', {hasText: 'Family'}).getByRole('button', {name: 'Pause automatic refresh'}).click();
+    await page.waitForSelector('#feeds li:has-text("manual refresh")');
     await page.locator('#feeds li', {hasText: 'Family'}).getByRole('button', {name: 'Remove'}).click();
     await page.waitForSelector('#feeds li:has-text("Family")', {state: 'detached'});
 

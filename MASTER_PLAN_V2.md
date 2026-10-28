@@ -59,17 +59,17 @@ Birthdays, chores, school dates, smart layouts and second display support, based
 
 ## Current implementation status — 28 October 2026
 - SQLite persistence, password sign-in, household isolation, admin/member roles, CSRF protection and local mobile editing are implemented.
-- Shopping add/check/remove, manual events, private-event masking, calendar paste import and protected HTTPS feed retrieval are implemented. Recurring events and automatic feed fetching remain deferred.
+- Shopping add/check/remove, manual events, private-event masking, calendar paste import and protected HTTPS feed retrieval are implemented. Daily/weekly/monthly/yearly recurrence and opt-in scheduled feed refresh are implemented; encrypted feed/source storage remains deferred.
 - Sunset calculation, cached fake weather, daily verses, household settings and scoped/revocable shopping Shortcuts tokens are implemented.
 - Today renderer produces a deterministic 600×800 PNG. A local background worker checks each household every minute, including date/event/verse/sunset rollover and weather TTL refresh. No browser or edits are needed for these checks while the server runs.
 - Verified PNGs are published atomically beside the database, with content hashes. Unchanged images are not rewritten. Render/publication failures preserve the last valid household image across restarts.
 - Authenticated browser previews check every minute while visible and on reconnect/return to the tab. Unchanged hashes receive 304 responses; failed updates keep the displayed image. Draft form values are preserved.
-- No live weather provider, calendar recurrence expansion, automatic feed downloads, encrypted feed addresses, Kindle bridge, HTTPS or production hosting is included.
+- No live weather provider, encrypted feed/source storage, Kindle bridge, HTTPS or production hosting is included.
 - Original M0–M8 gates remain in force. This is a partial implementation of the broader product, not a declaration that every original milestone has passed.
 
 ## Next work
-1. Review the Today screen at physical six-inch size and record readability/overflow findings.
-2. Finish calendar recurrence and controlled automatic feed refresh; protect stored feed addresses before deployment.
+1. Print the generated physical-size review sheet and record user readability acceptance; automated layout review and overflow fixes are complete.
+2. Protect stored feed addresses and cached source text before deployment. Recurrence and opt-in refresh are implemented and tested.
 3. Review multi-user concurrency, Shortcut retry/idempotency, backups/restore and deployment security.
 4. Complete the user-led hardware audit. Obtain separate explicit approval before device connection/modification or production deployment.
 
