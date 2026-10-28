@@ -3,15 +3,21 @@
   python3 -m app.manage add-user USERNAME [--admin]   # first user in a household is always an admin
   python3 -m app.manage seed-demo                     # fills an empty household with sample items
   python3 -m app.manage set-location LAT LON TIMEZONE # e.g. 51.5074 -0.1278 Europe/London
-  python3 -m app.manage refresh-feeds                 # re-downloads every calendar feed (schedule this to run)
+  python3 -m app.manage refresh-feeds                 # manual refresh; do not also schedule alongside the built-in worker
+  python3 -m app.manage backup NEW_DIRECTORY          # snapshot; preserve key separately
+  python3 -m app.manage restore BACKUP_DB NEW_DIRECTORY # requires matching KFD_KEY_FILE
+  python3 -m app.manage init-db                       # initialize/migrate offline; preserve the matching key file
 """
 from pathlib import Path
 import getpass, json, sys
-from . import store, auth, validate, feeds
+from . import store, auth, validate, feeds, secrets as storage_secrets
 import time
 
 def open_db():
- store.init_db(store.default_db_path())
+ try:
+  store.init_db(store.default_db_path())
+ except storage_secrets.StorageError as exc:
+  sys.exit(str(exc))
  return store.connect(store.default_db_path())
 
 def add_user(username, admin=False):
@@ -87,10 +93,24 @@ if __name__ == '__main__':
  args = sys.argv[1:]
  if args[:1] == ['add-user'] and len(args) in (2, 3) and args[2:] in ([], ['--admin']):
   add_user(args[1], admin=len(args) == 3)
+ elif args[:1] in (['backup'], ['restore']):
+  from . import backup
+  try:
+   if args[0] == 'backup' and len(args) == 2:
+    result = backup.backup(store.default_db_path(), args[1])
+   elif args[0] == 'restore' and len(args) == 3:
+    result = backup.restore(args[1], args[2])
+   else: sys.exit(__doc__)
+  except (OSError, ValueError, storage_secrets.StorageError) as exc:
+   sys.exit(str(exc))
+  print(f'Database saved: {result}. Preserve the matching key separately.')
  elif args == ['seed-demo']:
   seed_demo()
  elif args == ['refresh-feeds']:
   refresh_feeds()
+ elif args == ['init-db']:
+  open_db().close()
+  print('Database initialized; calendar storage encrypted. Preserve the separate key file.')
  elif args[:1] == ['set-location'] and len(args) == 4:
   set_location(*args[1:4])
  else:

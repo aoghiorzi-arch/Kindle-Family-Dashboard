@@ -4,7 +4,7 @@ from http.cookies import SimpleCookie
 from urllib.parse import urlparse
 from pathlib import Path
 import json, re, sys, time, threading
-from . import store, auth, weather, validate, ics, feeds, frames, calendars
+from . import store, auth, weather, validate, ics, feeds, frames, calendars, secrets as storage_secrets
 
 ROOT = Path(__file__).resolve().parent
 FIXTURE = json.loads((ROOT/'seed.json').read_text())
@@ -75,8 +75,9 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
    path = urlparse(self.path).path
    if path == '/': return self.send_bytes(200, INDEX, 'text/html; charset=utf-8')
    if path == '/static/app.js': return self.send_bytes(200, APP_JS, 'application/javascript; charset=utf-8')
-   conn = store.connect(db_path)
+   conn = None
    try:
+    conn = store.connect(db_path)
     user = self.current(conn)
     if user is None: return self.send_error_json(401, 'Sign in required')
     if path == '/api/state': return self.send_json(200, self.state(conn, user))
@@ -90,13 +91,16 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
       return self.send_bytes(304, b'', 'image/png', extra)
      return self.send_bytes(200, body, 'image/png', extra)
     return self.send_bytes(404, b'Not found', 'text/plain; charset=utf-8')
+   except storage_secrets.StorageError:
+    return self.send_error_json(503, 'Calendar storage unavailable; ask the administrator to check the server key.')
    finally:
-    conn.close()
+    if conn is not None: conn.close()
 
   def do_POST(self):
    path = urlparse(self.path).path
-   conn = store.connect(db_path)
+   conn = None
    try:
+    conn = store.connect(db_path)
     payload = self.read_json(CALENDAR_LIMIT if path.startswith('/api/calendar') else 4096)
     if path.startswith('/api/shortcut/'): return self.shortcut(conn, path, payload)
     if not self.same_origin(): return self.send_error_json(403, 'Cross-origin request refused')
@@ -109,10 +113,12 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
     if path in ADMIN_ONLY or path.startswith(('/api/calendar', '/api/feeds')) or TOKEN_REVOKE.match(path):
      if user['role'] != 'admin': return self.send_error_json(403, 'Admins only')
     return self.change(conn, user, path, payload)
+   except storage_secrets.StorageError:
+    return self.send_error_json(503, 'Calendar storage unavailable; ask the administrator to check the server key.')
    except ValueError as exc:
     return self.send_error_json(400, str(exc))
    finally:
-    conn.close()
+    if conn is not None: conn.close()
 
   def login(self, conn, payload):
    username = str(payload.get('username', '')).strip()
@@ -142,8 +148,11 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
    if row is None: return self.send_error_json(401, 'Invalid or revoked token')
    if path != '/api/shortcut/shopping': return self.send_error_json(404, 'Not found')
    if SHORTCUT_SCOPE not in row['scopes'].split(','): return self.send_error_json(403, 'Token lacks shopping:add')
-   store.add_shopping(conn, row['household_id'], row['created_by'], validate.clean_title(payload.get('title')))
-   return self.send_json(201, {'ok': True})
+   try:
+    created = store.add_shortcut_shopping(conn, row, validate.clean_title(payload.get('title')), payload.get('request_id'))
+   except store.RequestConflict as exc:
+    return self.send_error_json(409, str(exc))
+   return self.send_json(201 if created else 200, {'ok': True, 'duplicate': not created})
 
   def state(self, conn, user):
    hh = user['household_id']
@@ -273,7 +282,10 @@ def make_server(db_path, port=8765, host='127.0.0.1', provider=None, fetcher=Non
 
 def main():
  db_path = store.default_db_path()
- store.init_db(db_path)
+ try:
+  store.init_db(db_path)
+ except storage_secrets.StorageError as exc:
+  sys.exit(str(exc))
  port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
  server = make_server(db_path, port)
  print(f'Family Hub (local only): http://127.0.0.1:{port} — database {db_path} (Ctrl-C to stop)', flush=True)

@@ -1,7 +1,7 @@
 """Local calendar maintenance, independent of the frame renderer and request threads."""
 import logging
 import time
-from . import feeds, ics, store
+from . import feeds, ics, store, secrets as storage_secrets
 
 LOG = logging.getLogger(__name__)
 CHECK_SECONDS = 60
@@ -26,10 +26,11 @@ class CalendarService:
      if stop is not None and stop.is_set(): break
      if source['expanded_day'] == today: continue
      try:
-      rows, _ = ics.parse_events(source['text'], location['tz'], today)
+      text = store.source_text(conn, household_id, source['source'], source['text'])
+      rows, _ = ics.parse_events(text, location['tz'], today)
       store.replace_source_events(conn, household_id, source['source'], rows,
-       source['text'], today, expected_text=source['text'], expected_tz=location['tz'])
-     except ValueError:
+       text, today, expected_text=text, expected_tz=location['tz'])
+     except (ValueError, storage_secrets.StorageError):
       LOG.warning('Calendar expansion failed; retaining saved events')
     for feed in store.list_feeds(conn, household_id):
      if stop is not None and stop.is_set(): break

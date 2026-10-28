@@ -23,17 +23,17 @@ Updated: 28 October 2026. Scope: local software, fictional data. The original pr
 | M1 — Architecture/environment | Single Python backend, SQLite, bundled fonts, local startup, Python/HTTP/browser checks | Formal lint/type checks and repeatable clean-install CI are not established. G1 is partial. |
 | M2 — Domain/APIs | Validation, persistence, household isolation, sessions, roles, shopping/events | Broader concurrency coverage, idempotent retries and audit requirements remain. G2 is partial. |
 | M3 — Family Hub | Mobile shopping/calendar/settings and authenticated preview; browser workflows tested | Safari/accessibility review, broader offline states and additional display settings remain. G3 evidence covers the lean flow. |
-| M4 — Data/scheduling | Fake weather TTL/failure cache, computed sunset, daily verse, local frame worker, recurring calendars and opt-in feed scheduling | Live weather and RSS remain deferred; source-secret protection remains. G4 is partial. |
+| M4 — Data/scheduling | Fake weather TTL/failure cache, computed sunset, daily verse, local frame worker, recurring calendars, opt-in feed scheduling and encrypted feed/source storage | Live weather and RSS remain deferred. G4 is partial. |
 | M5 — Renderer/simulator | Deterministic 600×800 Today PNG, privacy masking, atomic files, hashes, persisted fallback | Printable physical-size fixtures and bounds checks are implemented; user paper acceptance, golden-image suite and later pages remain. G5 is partial. |
 | M6 — Shortcuts/multi-user | Scoped/revocable shopping tokens, permissions and isolation checks | Idempotency, duplicate/offline retries and full device credential scenarios remain. G6 is partial. |
 | M7 — Kindle integration | No device changes or client implementation | Requires completed hardware assessment and separate explicit approval. |
-| M8 — Deployment/acceptance | Local-only application | HTTPS, hardened hosting, protected feed secrets, backup/restore, 72-hour soak and production approval remain. |
+| M8 — Deployment/acceptance | Local-only application; feed URLs/raw sources encrypted with a separate key | HTTPS, hardened hosting, separate key custody/rotation, backup/restore, 72-hour soak and production approval remain. |
 
 ## Next priorities
 
 1. Print and review the generated Today fixtures at physical six-inch size; automated overflow/privacy checks and visual inspection are complete.
-2. Recurrence and opt-in scheduled feed refresh are implemented; complete protection of stored feed/source secrets before deployment.
-3. Protect stored private feed addresses, then verify backup/restore and Shortcut retry/idempotency.
+2. Plan backup scheduling and key rotation; verified backup/restore with separate key custody is implemented.
+3. Broaden multi-user concurrency and soak testing; persistent Shortcut retry receipts are implemented.
 4. Select a hosting/runtime approach after requirements are verified. No public deployment in this milestone.
 5. Complete the hardware checklist with the user before selecting or installing any Kindle-side component.
 
@@ -50,3 +50,24 @@ The app must be running for periodic checks. While stopped, its saved image rema
 - [ ] User paper readability acceptance; physical Kindle audit and production/hardware gates remain open.
 
 See `DISPLAY_REVIEW.md` and `VERIFICATION_DISPLAY_CALENDAR.md` for evidence and limits. This supersedes the recurrence/scheduling outstanding items in the earlier verification report.
+
+## Third software batch — calendar storage protection
+
+- [x] Encrypt feed addresses and cached calendar sources using authenticated, row/household-bound encryption.
+- [x] Generate a separate owner-only key; support an external key path and reject lost/wrong/unsafe keys without reset.
+- [x] Migrate legacy plaintext fields transactionally, retain event IDs/settings, and clean SQLite logical files before serving requests.
+- [x] Retain last-good events on storage errors; return a fixed HTTP 503 without exposing secrets.
+- [x] Test ciphertext tampering/substitution, migration rollback/cleanup recovery, WAL conversion, restart and database/key copy recovery.
+- [ ] Backup scheduling, rotation tooling and broader deployment hardening remain open.
+
+See `CALENDAR_STORAGE.md` and `VERIFICATION_CALENDAR_STORAGE.md`. This supersedes plaintext feed/source warnings in earlier verification reports. Derived events, household records and frames remain sensitive unencrypted data.
+
+## Fourth software batch — recovery and Shortcut retries
+
+- [x] Consistent SQLite backup, including WAL, with integrity, foreign-key and encrypted-field verification.
+- [x] Restore to a new private directory using the separate matching key; refuse overwrite and clear browser sessions.
+- [x] Preserve calendars, scoped tokens and retry receipts across recovery; regenerate frames on demand.
+- [x] Persistent token-scoped request IDs, atomic shopping insertion/receipt, conflict responses and concurrent retry tests.
+- [x] Document recovery rehearsal and UUID reuse in Shortcuts.
+
+See `BACKUP_RESTORE.md`, `SHORTCUTS.md` and `VERIFICATION_RECOVERY.md`. Backup scheduling and full-database encryption remain outside this batch.

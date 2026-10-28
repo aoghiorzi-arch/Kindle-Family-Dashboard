@@ -3,7 +3,7 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import hashlib, os, secrets, sqlite3, time
-from . import content
+from . import content, secrets as storage_secrets
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS households (
@@ -63,6 +63,12 @@ CREATE TABLE IF NOT EXISTS api_tokens (
  last_used_at INTEGER,
  revoked_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS shortcut_requests (
+ token_id INTEGER NOT NULL REFERENCES api_tokens(id) ON DELETE CASCADE,
+ request_id TEXT NOT NULL,
+ title TEXT NOT NULL,
+ PRIMARY KEY(token_id, request_id)
+);
 CREATE TABLE IF NOT EXISTS calendar_events (
  id INTEGER PRIMARY KEY,
  household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
@@ -98,27 +104,52 @@ CREATE INDEX IF NOT EXISTS events_household ON events(household_id);
 def default_db_path():
  return Path(os.environ.get('KFD_DB', Path(__file__).resolve().parent.parent/'data'/'family.sqlite3'))
 
-def connect(path):
+class Connection(sqlite3.Connection):
+ """One key snapshot per connection; never log or expose it."""
+ cipher = None
+
+def raw_connect(path):
  # Autocommit: each statement is its own transaction, so no explicit commits are needed.
- conn = sqlite3.connect(path, timeout=5, isolation_level=None)
+ conn = sqlite3.connect(path, timeout=5, isolation_level=None, factory=Connection)
  conn.row_factory = sqlite3.Row
  conn.execute('PRAGMA foreign_keys=ON')
  return conn
+
+def connect(path):
+ conn = raw_connect(path)
+ try:
+  conn.cipher = storage_secrets.load_cipher(path)
+  storage_secrets.verify(conn, conn.cipher)
+  conn.execute('PRAGMA secure_delete=ON')
+  return conn
+ except Exception:
+  conn.close()
+  raise
 
 def ensure_column(conn, table, column, definition):
  if column not in {r['name'] for r in conn.execute(f'PRAGMA table_info({table})')}:
   conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {definition}')
 
 def init_db(path):
- Path(path).parent.mkdir(parents=True, exist_ok=True)
- conn = connect(path)
+ Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+ # New database files are private even under a permissive process umask.
  try:
+  fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+ except FileExistsError:
+  pass
+ else:
+  os.close(fd)
+ conn = raw_connect(path)
+ try:
+  if storage_secrets.marker(conn) is not None:
+   storage_secrets.verify(conn, storage_secrets.load_cipher(path), allow_pending=True)
   conn.executescript(SCHEMA)
   # Databases created by earlier versions get newer columns added in place.
   ensure_column(conn, 'users', 'role', "TEXT NOT NULL DEFAULT 'member'")
   ensure_column(conn, 'calendar_events', 'source', "TEXT NOT NULL DEFAULT 'paste'")
   ensure_column(conn, 'calendar_feeds', 'refresh_enabled', 'INTEGER NOT NULL DEFAULT 0')
   ensure_column(conn, 'calendar_feeds', 'skipped_count', 'INTEGER NOT NULL DEFAULT 0')
+  storage_secrets.initialize(conn, path)
  finally: conn.close()
 
 def hash_token(token):
@@ -249,7 +280,7 @@ def replace_source_events(conn, household_id, source, rows, text=None, expanded_
   if expected_text is not None:
    current = conn.execute('SELECT text FROM calendar_sources WHERE household_id=? AND source=?',
     (household_id, source)).fetchone()
-   if current is None or current['text'] != expected_text:
+   if current is None or source_text(conn, household_id, source, current['text']) != expected_text:
     conn.execute('ROLLBACK')
     return False
   conn.execute('DELETE FROM calendar_events WHERE household_id=? AND source=?', (household_id, source))
@@ -257,7 +288,8 @@ def replace_source_events(conn, household_id, source, rows, text=None, expanded_
    [(household_id, r['uid'], r['day'], r['time'], r['title'], int(r['private']), source) for r in rows])
   if text is not None:
    conn.execute('INSERT OR REPLACE INTO calendar_sources(household_id,source,text,expanded_day) VALUES(?,?,?,?)',
-    (household_id, source, text, expanded_day))
+    (household_id, source, storage_secrets.seal(conn.cipher, text,
+     storage_secrets.context('calendar-source', household_id, source)), expanded_day))
   else:
    conn.execute('DELETE FROM calendar_sources WHERE household_id=? AND source=?', (household_id, source))
   conn.execute('COMMIT')
@@ -275,20 +307,40 @@ def calendar_count(conn, household_id):
 def clear_calendar(conn, household_id):
  replace_calendar(conn, household_id, [])
 
+def source_text(conn, household_id, source, encrypted):
+ return storage_secrets.unseal(conn.cipher, encrypted,
+  storage_secrets.context('calendar-source', household_id, source))
+
+def decrypted_feed(conn, household_id, row):
+ if row is None: return None
+ result = dict(row)
+ result['url'] = storage_secrets.unseal(conn.cipher, row['url'],
+  storage_secrets.context('feed-url', household_id, row['id']))
+ return result
+
 def list_feeds(conn, household_id):
- return conn.execute('''SELECT id,label,url,last_attempt,last_success,last_error,refresh_enabled,skipped_count FROM calendar_feeds
-  WHERE household_id=? ORDER BY id''', (household_id,)).fetchall()
+ return [decrypted_feed(conn, household_id, row) for row in conn.execute('''SELECT id,label,url,last_attempt,last_success,last_error,refresh_enabled,skipped_count FROM calendar_feeds
+  WHERE household_id=? ORDER BY id''', (household_id,)).fetchall()]
 
 def get_feed(conn, household_id, feed_id):
- return conn.execute('SELECT id,label,url,refresh_enabled,last_attempt FROM calendar_feeds WHERE id=? AND household_id=?',
-  (feed_id, household_id)).fetchone()
+ return decrypted_feed(conn, household_id, conn.execute('SELECT id,label,url,refresh_enabled,last_attempt FROM calendar_feeds WHERE id=? AND household_id=?',
+  (feed_id, household_id)).fetchone())
 
 def feed_count(conn, household_id):
  return conn.execute('SELECT COUNT(*) n FROM calendar_feeds WHERE household_id=?', (household_id,)).fetchone()['n']
 
 def add_feed(conn, household_id, label, url, refresh_enabled=False):
- return conn.execute('INSERT INTO calendar_feeds(household_id,label,url,created_at,refresh_enabled) VALUES(?,?,?,?,?)',
-  (household_id, label, url, int(time.time()), int(refresh_enabled))).lastrowid
+ conn.execute('BEGIN IMMEDIATE')
+ try:
+  feed_id = conn.execute("INSERT INTO calendar_feeds(household_id,label,url,created_at,refresh_enabled) VALUES(?,?,'',?,?)",
+   (household_id, label, int(time.time()), int(refresh_enabled))).lastrowid
+  encrypted = storage_secrets.seal(conn.cipher, url, storage_secrets.context('feed-url', household_id, feed_id))
+  conn.execute('UPDATE calendar_feeds SET url=? WHERE id=?', (encrypted, feed_id))
+  conn.execute('COMMIT')
+  return feed_id
+ except Exception:
+  conn.execute('ROLLBACK')
+  raise
 
 def delete_feed(conn, household_id, feed_id):
  """Removes the feed and its events. Returns False when the feed is not this household's."""
@@ -334,3 +386,33 @@ def snapshot(conn, household_id, today, weather):
   'shopping': [{'title': r['title'], 'done': bool(r['done'])} for r in list_shopping(conn, household_id)],
  }
 
+
+
+class RequestConflict(ValueError):
+ pass
+
+
+def add_shortcut_shopping(conn, token, title, request_id=None):
+ """Retain receipts for the token lifetime, including after an item is deleted."""
+ if request_id is None:
+  add_shopping(conn, token['household_id'], token['created_by'], title)
+  return True
+ if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128 or any(
+   c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_' for c in request_id):
+  raise ValueError('request_id must contain 1–128 letters, digits, hyphens or underscores')
+ conn.execute('BEGIN IMMEDIATE')
+ try:
+  previous = conn.execute('SELECT title FROM shortcut_requests WHERE token_id=? AND request_id=?',
+   (token['id'], request_id)).fetchone()
+  if previous is not None:
+   if previous['title'] != title: raise RequestConflict('request_id was already used for a different title')
+   created = False
+  else:
+   add_shopping(conn, token['household_id'], token['created_by'], title)
+   conn.execute('INSERT INTO shortcut_requests VALUES(?,?,?)', (token['id'], request_id, title))
+   created = True
+  conn.execute('COMMIT')
+  return created
+ except Exception:
+  conn.execute('ROLLBACK')
+  raise
