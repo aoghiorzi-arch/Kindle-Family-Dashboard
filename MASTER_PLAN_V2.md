@@ -69,8 +69,8 @@ Birthdays, chores, school dates, smart layouts and second display support, based
 
 ## Next work
 1. Print the generated physical-size review sheet and record user readability acceptance; automated layout review and overflow fixes are complete.
-2. Review key rotation, backup scheduling and deployment security. Verified backup/restore commands preserve separate key custody. Feed addresses and cached sources now use authenticated encryption; other household fields and frames still need protection.
-3. Broaden multi-user concurrency and soak testing. Shortcut request IDs now prevent duplicate retry additions.
+2. Establish actual-machine key/backup custody and repeat the recovery drill. Verification, safe restored credentials/paused feeds, concurrent snapshots and work/size limits are tested locally. Review key rotation, off-machine retention and deployment security.
+3. Complete Safari/accessibility, clean-install CI, remaining audit requirements and the soak test. Shortcut transaction/revocation races and concurrent retries are tested; the client offline queue remains unimplemented.
 4. Complete the user-led hardware audit. Obtain separate explicit approval before device connection/modification or production deployment.
 
 See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the current checklist and [`docs/VERIFICATION_2026-10-28.md`](docs/VERIFICATION_2026-10-28.md) for this software milestone's evidence.

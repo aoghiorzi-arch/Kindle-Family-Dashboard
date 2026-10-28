@@ -3,7 +3,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse
 from pathlib import Path
-import json, re, sys, time, threading
+import json, re, sys, time, threading, sqlite3
 from . import store, auth, weather, validate, ics, feeds, frames, calendars, secrets as storage_secrets
 
 ROOT = Path(__file__).resolve().parent
@@ -152,6 +152,10 @@ def make_handler(db_path, limiter, provider, fetcher, frame_service):
     created = store.add_shortcut_shopping(conn, row, validate.clean_title(payload.get('title')), payload.get('request_id'))
    except store.RequestConflict as exc:
     return self.send_error_json(409, str(exc))
+   except store.ShortcutError as exc:
+    return self.send_error_json(exc.status, str(exc))
+   except sqlite3.OperationalError:
+    return self.send_error_json(503, 'Shopping update temporarily unavailable; retry with the same request ID')
    return self.send_json(201 if created else 200, {'ok': True, 'duplicate': not created})
 
   def state(self, conn, user):

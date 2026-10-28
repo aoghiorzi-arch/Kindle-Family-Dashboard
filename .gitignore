@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 data/
 *.key
+backups/
+*.sqlite3
+*.sqlite3-*

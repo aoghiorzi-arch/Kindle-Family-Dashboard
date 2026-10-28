@@ -38,7 +38,7 @@ Calendar feed addresses and cached `.ics` source text are encrypted using a sepa
 
 ## Backup and recovery
 
-Use `python3 -m app.manage backup NEW_DIRECTORY` to create a verified database snapshot. Preserve its matching encryption key separately. Use `python3 -m app.manage restore BACKUP_DB NEW_DIRECTORY` with `KFD_KEY_FILE` pointing to that key; restore refuses existing destinations and clears browser sessions. See [`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md) for the recovery procedure.
+Use `python3 -m app.manage backup NEW_DIRECTORY` to create a verified database snapshot. Preserve its matching encryption key separately. `python3 -m app.manage verify-backup BACKUP_DB --key-file ORIGINAL.key` checks a snapshot without migration or data changes. Use `python3 -m app.manage restore BACKUP_DB NEW_DIRECTORY` with `KFD_KEY_FILE` pointing to that key, or append `--key-file ORIGINAL.key` explicitly. Restore refuses existing destinations, clears browser sessions, revokes recovered Shortcut tokens and pauses automatic feeds. Frames regenerate locally. See [`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md) for the recovery procedure and work/size limits.
 
 ## Render a standalone PNG
 
@@ -78,7 +78,7 @@ Complete, verified 600×800 PNGs are written to temporary files and atomically r
   - feed addresses are never shown again after saving (the phone shows only the host) and never appear in error messages.
   - Refresh runs when you press Refresh, or with `python3 -m app.manage refresh-feeds`. An admin can also enable automatic refresh per feed in Household settings: checks run every 30 minutes while the server runs, including after a failed attempt. Existing/new feeds default to manual; the choice and last attempt survive restarts. Pause stops future automatic downloads (an in-flight download may finish). The display never fetches. A separate calendar worker keeps slow downloads out of the frame renderer. Do not schedule the management command as well as the built-in worker.
   - Feed addresses and cached source calendar text are encrypted at rest with a separate key. Parsed event records, feed labels and other household data remain ordinary SQLite fields; protect the entire database and saved frames. Sources are removed when their pasted import or feed is removed. Cached recurrence can roll forward locally even when a feed is unreachable; it reflects the last downloaded version, not live confirmation.
-- Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked. An optional `request_id` makes retries safe without suppressing deliberate repeat purchases.
+- Shortcuts: a token can only add shopping items (`docs/SHORTCUTS.md`). Tokens are stored as hashes and can be revoked. An optional `request_id` makes retries safe without suppressing deliberate repeat purchases. Authorization is rechecked in the insertion transaction; each token retains at most 5,000 keyed request receipts while allowing existing retries at capacity.
 - Daily thought: a King James Version verse chosen by date (the same verse all day), bundled in `app/content.py`. No network calls. Check each verse against a printed Bible before it goes on a family display.
 - A real weather provider makes external network calls and needs separate approval before it is added.
 - Not included: full-database encryption, key rotation tooling, scheduled backups, live weather, Shortcuts credentials, Kindle device support, HTTPS, production hosting, and any device bridge.
