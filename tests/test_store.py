@@ -69,7 +69,7 @@ class StoreTest(unittest.TestCase):
   store.add_event(self.conn, self.hh, self.alice, 'Secret', '10:00', True)
   store.add_shopping(self.conn, self.hh, self.alice, 'Eggs')
   fixture = json.loads((Path(__file__).resolve().parents[1]/'app'/'seed.json').read_text())
-  frame = store.snapshot(self.conn, self.hh, '2026-10-28', fixture, fixture['weather'])
+  frame = store.snapshot(self.conn, self.hh, '2026-10-28', fixture['weather'])
   self.assertEqual(frame['events'], [{'title': 'Secret', 'time': '10:00', 'private': True}])
   self.assertEqual(frame['shopping'], [{'title': 'Eggs', 'done': False}])
   self.assertEqual(frame['date'], '2026-10-28')

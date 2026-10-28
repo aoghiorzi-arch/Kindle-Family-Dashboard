@@ -26,6 +26,18 @@ def fit(draw,text,max_width,size=26,kind='sans',min_size=16):
  while text and draw.textbbox((0,0),text+ell,font=f)[2] > max_width: text=text[:-1]
  return text+ell,f
 
+def quote_lines(draw,text,max_lines=2,width=490):
+ """Wrap text to measured width. Returns (lines, truncated); the caller adds the ellipsis."""
+ lines=[]; cur=''
+ for word in text.split():
+  trial=(cur+' '+word).strip()
+  if draw.textbbox((0,0),trial,font=font(21,'italic'))[2] <= width: cur=trial
+  else:
+   if cur: lines.append(cur)
+   cur=word
+ if cur: lines.append(cur)
+ return lines[:max_lines], len(lines)>max_lines
+
 def render(data):
  im=Image.new('RGB',(W,H),BG); d=ImageDraw.Draw(im)
  left,right=44,556
@@ -72,16 +84,8 @@ def render(data):
  txt(left,622,'A THOUGHT FOR TODAY',18,'bold',GRAY)
  quote=data.get('quote',{})
  q='“'+str(quote.get('text','')).strip('“”')+'”'
- # Two lines max, truncate by measured width.
- words=q.split(); lines=[]; cur=''
- for word in words:
-  trial=(cur+' '+word).strip()
-  if d.textbbox((0,0),trial,font=font(21,'italic'))[2] <= 490: cur=trial
-  else:
-   if cur: lines.append(cur)
-   cur=word
- if cur: lines.append(cur)
- if len(lines)>2: lines=lines[:2];lines[-1]=lines[-1].rstrip('”')+'…'
+ lines,truncated=quote_lines(d,q)
+ if truncated: lines[-1]=lines[-1].rstrip('”')+'…'
  for i,line in enumerate(lines): txt(left,665+i*29,line,21,'italic')
  if not lines: txt(left,665,'No thought selected',21,'italic',GRAY)
  source, sf=fit(d,quote.get('attribution',''),490,18,'sans',15)

@@ -95,7 +95,7 @@ def make_handler(db_path, limiter, provider):
     if path == '/frame.png':
      hh, today = user['household_id'], date.today().isoformat()
      block = weather.frame_weather(conn, hh, provider, int(time.time()), today)
-     frame = store.snapshot(conn, hh, today, FIXTURE, block)
+     frame = store.snapshot(conn, hh, today, block)
      return self.send_bytes(200, png_bytes(frame), 'image/png')
     return self.send_bytes(404, b'Not found', 'text/plain; charset=utf-8')
    finally:

@@ -1,6 +1,7 @@
 """SQLite persistence for the Family Hub. Every item query is scoped to one household."""
 from pathlib import Path
 import hashlib, os, secrets, sqlite3, time
+from . import content
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS households (
@@ -147,12 +148,12 @@ def get_weather(conn, household_id):
 def put_weather(conn, household_id, fetched_at, payload):
  conn.execute('INSERT OR REPLACE INTO weather_cache(household_id,fetched_at,payload) VALUES(?,?,?)', (household_id, fetched_at, payload))
 
-def snapshot(conn, household_id, today, fixture, weather):
- """Renderer input for one household. The quote still comes from the fixture until a content adapter exists."""
+def snapshot(conn, household_id, today, weather):
+ """Renderer input for one household on one date."""
  return {
   'date': today,
   'weather': weather,
-  'quote': fixture.get('quote', {}),
+  'quote': content.verse_for(today),
   'events': [{'title': r['title'], 'time': r['time'], 'private': bool(r['private'])} for r in list_events(conn, household_id)],
   'shopping': [{'title': r['title'], 'done': bool(r['done'])} for r in list_shopping(conn, household_id)],
  }
