@@ -11,7 +11,8 @@
   "weather": {
     "temperatureC": 14,
     "summary": "Partly cloudy",
-    "updatedAt": "2026-10-29T07:45:00Z"
+    "updatedAt": "2026-10-29T07:45:00Z",
+    "attribution": "Weather data by Open-Meteo.com (CC BY 4.0)"
   },
   "sun": {
     "sunrise": "07:12",

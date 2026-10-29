@@ -11,7 +11,8 @@
   "weather": {
     "temperatureC": null,
     "summary": null,
-    "updatedAt": null
+    "updatedAt": null,
+    "attribution": null
   },
   "sun": {
     "sunrise": null,
