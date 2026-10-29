@@ -1,7 +1,8 @@
 // Who is calling. Household identity always comes from the stored credential, never from the request body.
 import { HttpError } from "./http.ts";
 import type { Env } from "./env.ts";
-import { isApiTokenShape, randomSecret, sha256Hex } from "../../../packages/core/src/index.ts";
+import { isApiTokenShape, randomSecret, sha256Hex, toBase64Url } from "../../../packages/core/src/index.ts";
+import { ACCESS_HEADER, verifyAccessJwt } from "./access.ts";
 
 export const SESSION_COOKIE = "kfd_session";
 export const SESSION_DAYS = 14;
@@ -104,4 +105,39 @@ export function sessionCookie(token: string): string {
 
 export function clearSessionCookie(): string {
   return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
+}
+
+// ---- Identity: Cloudflare Access in production, development cookie locally ---------
+
+export function accessConfigured(env: Env): boolean {
+  return Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
+}
+
+// Access mode: the CSRF token is derived from the server secret, the member and the Access session, so it changes when the session does.
+async function accessCsrf(env: Env, memberId: string, sub: string, iat: number): Promise<string> {
+  if (!env.CSRF_SECRET) throw new HttpError(500, "internal", "Server is not configured");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.CSRF_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${memberId}|${sub}|${iat}`));
+  return toBase64Url(new Uint8Array(mac));
+}
+
+// Who is calling, for every browser route. Access identifies the person; the household comes from the matched member row.
+export async function requireMember(request: Request, env: Env, now: Date): Promise<MemberSession> {
+  if (!accessConfigured(env)) return requireSession(request, env, now);
+  const token = request.headers.get(ACCESS_HEADER);
+  if (!token) throw new HttpError(401, "unauthenticated", "Sign in required");
+  const identity = await verifyAccessJwt(token, { teamDomain: env.ACCESS_TEAM_DOMAIN!, aud: env.ACCESS_AUD! }, now);
+  const row = await env.DB.prepare(
+    "SELECT id, display_name, household_id, role FROM members WHERE lower(email) = ?",
+  )
+    .bind(identity.email)
+    .first<{ id: string; display_name: string; household_id: string; role: "admin" | "member" }>();
+  if (!row) throw new HttpError(403, "not_a_member", "This email address is not a member of a household");
+  return {
+    memberId: row.id,
+    displayName: row.display_name,
+    householdId: row.household_id,
+    role: row.role,
+    csrfToken: await accessCsrf(env, row.id, identity.sub, identity.iat),
+  };
 }

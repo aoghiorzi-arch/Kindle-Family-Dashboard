@@ -105,6 +105,13 @@ async function loadDevices() {
 // ---- Views ------------------------------------------------------------------
 
 function signInView() {
+  if (state.health?.signIn === "cloudflare-access") {
+    // Access has already checked the person; this view only appears when their email is not yet a household member.
+    return el("section", { class: "card" },
+      el("h2", { tabindex: "-1" }, "Not a member yet"),
+      el("p", {}, "You are signed in, but your email address is not yet a member of a household. Ask a household admin to invite you."),
+    );
+  }
   if (state.health?.signIn !== "development") {
     return el("section", { class: "card" },
       el("h2", { tabindex: "-1" }, "Sign in"),
@@ -310,12 +317,55 @@ function settingsView() {
       el("button", { type: "button", on: { click: signOut } }, "Sign out"),
     ),
   ];
-  if (s.role === "admin") children.push(locationSection(), devicesSection());
+  if (s.role === "admin") children.push(membersSection(), locationSection(), devicesSection());
   children.push(el("div", { class: "card" },
     el("h3", {}, "Shopping Shortcut"),
     el("p", { class: "muted" }, "Follow shortcuts/README.md in the repository to add items from Siri or the Shortcuts app. Never share a Shortcut that contains a token."),
   ));
   return el("section", {}, children);
+}
+
+// Invite a family member by email. They can then sign in with Cloudflare Access using that address.
+function membersSection() {
+  const nameInput = el("input", { type: "text", id: "invite-name", maxlength: "60", required: true, autocomplete: "off" });
+  const emailInput = el("input", { type: "email", id: "invite-email", required: true, autocomplete: "off", "aria-describedby": "invite-help" });
+  const role = el("select", { id: "invite-role" },
+    el("option", { value: "member" }, "Member"),
+    el("option", { value: "admin" }, "Admin"));
+  const list = el("ul", { class: "list", "aria-label": "Members" });
+  api("/api/admin/members").then((data) => {
+    list.replaceChildren(...data.members.map((m) => el("li", {},
+      el("span", { class: "item-title" }, m.displayName),
+      el("span", { class: "badge" }, `${m.role} · ${m.email ?? "no email (local only)"}`))));
+  }).catch(() => {});
+  return el("section", {},
+    el("h2", { tabindex: "-1" }, "Family members"),
+    list,
+    el("div", { class: "card" },
+      el("h3", {}, "Invite a member"),
+      el("p", { id: "invite-help", class: "muted" }, "They sign in with a one-time code sent to this email address."),
+      el("form", {
+        class: "stack",
+        on: {
+          submit: async (event) => {
+            event.preventDefault();
+            try {
+              await api("/api/admin/members", { method: "POST", body: { displayName: nameInput.value.trim(), email: emailInput.value.trim(), role: role.value }, csrf: state.session.csrfToken });
+              setStatus("Invitation saved. They can now sign in with that email address.");
+              nameInput.value = "";
+              emailInput.value = "";
+              renderView();
+            } catch (error) {
+              setStatus(error.status === 409 ? "That email is already a member." : "Could not save the invitation. Check the name and email.", true);
+            }
+          },
+        },
+      },
+      el("label", { for: "invite-name" }, "Name"), nameInput,
+      el("label", { for: "invite-email" }, "Email"), emailInput,
+      el("label", { for: "invite-role" }, "Role"), role,
+      el("button", { type: "submit", class: "primary" }, "Invite"))),
+  );
 }
 
 // Latitude and longitude drive sunrise, sunset and weather. Blank both to clear them.
@@ -446,13 +496,19 @@ async function revoke(device) {
 }
 
 async function signOut() {
+  let logoutUrl = null;
   try {
-    await api("/api/logout", { method: "POST", csrf: state.session.csrfToken });
+    logoutUrl = (await api("/api/logout", { method: "POST", csrf: state.session.csrfToken })).logoutUrl ?? null;
   } catch {
     // Signing out locally is still the right result if the session already expired.
   }
   state.session = null;
   state.newToken = null;
+  // With Cloudflare Access, the browser must visit Access's logout page to end its own session.
+  if (logoutUrl) {
+    location.assign(logoutUrl);
+    return;
+  }
   render();
 }
 

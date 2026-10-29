@@ -22,6 +22,12 @@ export interface Env {
   ENVIRONMENT?: string;
   // Exact origin of the family web app, for CSRF checks on writes, for example https://family.example
   PUBLIC_ORIGIN: string;
+  // Cloudflare Access (production sign-in). When ACCESS_TEAM_DOMAIN and ACCESS_AUD are set, members are identified by Access.
+  // ACCESS_TEAM_DOMAIN is for example family.cloudflareaccess.com; ACCESS_AUD is the application's audience tag.
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_AUD?: string;
+  // Secret used to derive CSRF tokens in Access mode. Set with `wrangler secret put CSRF_SECRET`.
+  CSRF_SECRET?: string;
   // Integrations (Phase 5). Feed addresses are secrets. Calendar and news serve one household (HOUSEHOLD_ID) for now.
   CALENDAR_FEED_URL?: string;
   HOUSEHOLD_ID?: string;

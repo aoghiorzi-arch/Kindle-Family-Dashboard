@@ -2,6 +2,7 @@
 import type { Env } from "./env.ts";
 import { errorResponse, HttpError, json } from "./http.ts";
 import * as h from "./handlers.ts";
+import { accessConfigured } from "./auth.ts";
 import { runScheduled } from "./scheduled.ts";
 
 type Route = {
@@ -15,7 +16,10 @@ const ROUTES: Route[] = [
     method: "GET",
     pattern: /^\/api\/health$/,
     // Configuration only: says whether browser sign-in is available, never any household data.
-    run: async (_req, env) => json({ ok: true, signIn: env.ENVIRONMENT === "local" ? "development" : "unavailable" }),
+    run: async (_req, env) => json({
+      ok: true,
+      signIn: accessConfigured(env) ? "cloudflare-access" : env.ENVIRONMENT === "local" ? "development" : "unavailable",
+    }),
   },
   { method: "GET", pattern: /^\/api\/me$/, run: (req, env, now) => h.me(req, env, now) },
   { method: "POST", pattern: /^\/api\/dev\/login$/, run: (req, env, now) => h.devLogin(req, env, now) },
@@ -37,6 +41,10 @@ const ROUTES: Route[] = [
   { method: "GET", pattern: /^\/api\/admin\/devices$/, run: (req, env, now) => h.listDevices(req, env, now) },
   { method: "GET", pattern: /^\/api\/admin\/household\/location$/, run: (req, env, now) => h.getLocation(req, env, now) },
   { method: "PUT", pattern: /^\/api\/admin\/household\/location$/, run: (req, env, now) => h.setLocation(req, env, now) },
+  { method: "GET", pattern: /^\/api\/admin\/members$/, run: (req, env, now) => h.listMembers(req, env, now) },
+  { method: "POST", pattern: /^\/api\/admin\/members$/, run: (req, env, now) => h.inviteMember(req, env, now) },
+  // Shortcuts use this path. It is outside the browser sign-in and authenticated by its own token only.
+  { method: "POST", pattern: /^\/api\/shortcut\/shopping$/, run: (req, env, now) => h.createItem(req, env, now) },
   { method: "POST", pattern: /^\/api\/admin\/devices$/, run: (req, env, now) => h.createDevice(req, env, now) },
   {
     method: "POST",

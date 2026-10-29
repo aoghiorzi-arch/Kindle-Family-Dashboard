@@ -2,11 +2,12 @@
 import type { Env } from "./env.ts";
 import { HttpError, json, readJson } from "./http.ts";
 import {
+  accessConfigured,
   clearSessionCookie,
   createSession,
   requireCsrf,
   requireDevice,
-  requireSession,
+  requireMember,
   sessionCookie,
   type MemberSession,
 } from "./auth.ts";
@@ -56,7 +57,7 @@ function parseId(value: string): string {
 // ---- Browser session -------------------------------------------------------
 
 export async function me(request: Request, env: Env, now: Date): Promise<Response> {
-  const session = await requireSession(request, env, now);
+  const session = await requireMember(request, env, now);
   return json({
     memberId: session.memberId,
     displayName: session.displayName,
@@ -68,7 +69,7 @@ export async function me(request: Request, env: Env, now: Date): Promise<Respons
 
 // Local development only. Production has no sign-in route until a provider is chosen (ADR D2).
 export async function devLogin(request: Request, env: Env, now: Date): Promise<Response> {
-  if (env.ENVIRONMENT !== "local") throw new HttpError(404, "not_found", "Not found");
+  if (env.ENVIRONMENT !== "local" || accessConfigured(env)) throw new HttpError(404, "not_found", "Not found");
   const body = await readJson(request);
   const memberId = typeof body.memberId === "string" ? body.memberId : "";
   const member = await env.DB.prepare("SELECT id, role FROM members WHERE id = ?")
@@ -80,8 +81,12 @@ export async function devLogin(request: Request, env: Env, now: Date): Promise<R
 }
 
 export async function logout(request: Request, env: Env, now: Date): Promise<Response> {
-  const session = await requireSession(request, env, now);
+  const session = await requireMember(request, env, now);
   requireCsrf(request, env, session);
+  if (accessConfigured(env)) {
+    // Access keeps its own session cookie; the browser must visit its logout page to end it.
+    return json({ ok: true, logoutUrl: "/cdn-cgi/access/logout" });
+  }
   await env.DB.prepare("DELETE FROM sessions WHERE member_id = ? AND csrf_token = ?")
     .bind(session.memberId, session.csrfToken)
     .run();
@@ -91,7 +96,7 @@ export async function logout(request: Request, env: Env, now: Date): Promise<Res
 // ---- Shopping --------------------------------------------------------------
 
 export async function listShopping(request: Request, env: Env, now: Date): Promise<Response> {
-  const session = await requireSession(request, env, now);
+  const session = await requireMember(request, env, now);
   const { results } = await env.DB.prepare(
     `SELECT id, title, done, position, version FROM shopping_items
       WHERE household_id = ? ORDER BY position, created_at LIMIT ?`,
@@ -113,7 +118,7 @@ async function resolveWriter(request: Request, env: Env, now: Date): Promise<Wri
     const device = await requireDevice(request, env, ["shopping:add"]);
     return { householdId: device.householdId, memberId: null };
   }
-  const session: MemberSession = await requireSession(request, env, now);
+  const session: MemberSession = await requireMember(request, env, now);
   requireCsrf(request, env, session);
   return { householdId: session.householdId, memberId: session.memberId };
 }
@@ -141,7 +146,7 @@ export async function createItem(request: Request, env: Env, now: Date): Promise
 }
 
 export async function updateItem(request: Request, env: Env, now: Date, rawId: string): Promise<Response> {
-  const session = await requireSession(request, env, now);
+  const session = await requireMember(request, env, now);
   requireCsrf(request, env, session);
   const id = parseId(rawId);
   const body = await readJson(request);
@@ -182,7 +187,7 @@ export async function updateItem(request: Request, env: Env, now: Date, rawId: s
 }
 
 export async function deleteItem(request: Request, env: Env, now: Date, rawId: string, url: URL): Promise<Response> {
-  const session = await requireSession(request, env, now);
+  const session = await requireMember(request, env, now);
   requireCsrf(request, env, session);
   const id = parseId(rawId);
   const version = validate(() => parseVersion(Number(url.searchParams.get("version"))));
@@ -250,14 +255,14 @@ export async function deviceSnapshot(request: Request, env: Env, now: Date): Pro
 
 // What the Kindle would show right now, for the phone's Home preview.
 export async function snapshotPreview(request: Request, env: Env, now: Date): Promise<Response> {
-  const session = await requireSession(request, env, now);
+  const session = await requireMember(request, env, now);
   return json(await householdSnapshot(env, session.householdId, now));
 }
 
 // ---- Admin: device credentials ---------------------------------------------
 
 export async function listDevices(request: Request, env: Env, now: Date): Promise<Response> {
-  const session = await requireSession(request, env, now);
+  const session = await requireMember(request, env, now);
   if (session.role !== "admin") throw new HttpError(403, "forbidden", "Admin access required");
   const { results } = await env.DB.prepare(
     `SELECT id, name, kind, created_at, revoked_at FROM devices
@@ -278,8 +283,8 @@ export async function listDevices(request: Request, env: Env, now: Date): Promis
 
 const KIND_SCOPE = { display: "snapshot:read", shortcut: "shopping:add" } as const;
 
-async function requireAdmin(request: Request, env: Env, now: Date): Promise<MemberSession> {
-  const session = await requireSession(request, env, now);
+export async function requireAdmin(request: Request, env: Env, now: Date): Promise<MemberSession> {
+  const session = await requireMember(request, env, now);
   requireCsrf(request, env, session);
   if (session.role !== "admin") throw new HttpError(403, "forbidden", "Admin access required");
   return session;
@@ -351,7 +356,7 @@ export async function revokeDevice(request: Request, env: Env, now: Date, rawId:
 
 export async function getLocation(request: Request, env: Env, now: Date): Promise<Response> {
   // Read-only: no CSRF token is needed for a GET, but the caller must still be an admin.
-  const session = await requireSession(request, env, now);
+  const session = await requireMember(request, env, now);
   if (session.role !== "admin") throw new HttpError(403, "forbidden", "Admin access required");
   const row = await env.DB.prepare("SELECT latitude, longitude FROM households WHERE id = ?")
     .bind(session.householdId)
@@ -373,4 +378,44 @@ export async function setLocation(request: Request, env: Env, now: Date): Promis
     .bind(latitude, longitude, session.householdId)
     .run();
   return json({ latitude, longitude });
+}
+
+// ---- Admin: members and invitations ------------------------------------------
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function listMembers(request: Request, env: Env, now: Date): Promise<Response> {
+  const session = await requireMember(request, env, now);
+  if (session.role !== "admin") throw new HttpError(403, "forbidden", "Admin access required");
+  const { results } = await env.DB.prepare(
+    "SELECT id, display_name, role, email FROM members WHERE household_id = ? ORDER BY created_at, display_name",
+  )
+    .bind(session.householdId)
+    .all<{ id: string; display_name: string; role: string; email: string | null }>();
+  return json({
+    members: results.map((m) => ({ id: m.id, displayName: m.display_name, role: m.role, email: m.email })),
+  });
+}
+
+// Invites a family member by email. They can sign in with Access once their email is listed here.
+export async function inviteMember(request: Request, env: Env, now: Date): Promise<Response> {
+  const session = await requireAdmin(request, env, now);
+  const body = await readJson(request);
+  const displayName = typeof body.displayName === "string" ? body.displayName.trim() : "";
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const role = body.role === undefined ? "member" : body.role;
+  if (displayName.length < 1 || displayName.length > 60) {
+    throw new HttpError(400, "validation_failed", "displayName must be 1 to 60 characters");
+  }
+  if (!EMAIL.test(email) || email.length > 254) throw new HttpError(400, "validation_failed", "email is not valid");
+  if (role !== "member" && role !== "admin") throw new HttpError(400, "validation_failed", "role must be member or admin");
+  const existing = await env.DB.prepare("SELECT 1 AS found FROM members WHERE lower(email) = ?").bind(email).first();
+  if (existing) throw new HttpError(409, "conflict", "That email is already a member");
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT INTO members (id, household_id, display_name, role, email, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+  )
+    .bind(id, session.householdId, displayName, role, email, now.toISOString())
+    .run();
+  return json({ member: { id, displayName, role, email } }, 201);
 }
