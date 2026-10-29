@@ -120,6 +120,22 @@ try {
   await alex.reload();
   check("the token is not kept after reload", (await alex.locator("#token-value").count()) === 0);
 
+  // ---- Location: the admin sets it, the Home preview then shows sun times; members do not see the form
+  await alex.goto(`${BASE}/#/settings`);
+  await alex.waitForSelector("#loc-lat");
+  await alex.fill("#loc-lat", "51.5074");
+  await alex.fill("#loc-lon", "-0.1278");
+  await alex.click('button:has-text("Save location")');
+  await alex.waitForSelector('[role="status"]:has-text("Location saved.")');
+  const sun = await alex.evaluate(async () => (await (await fetch("/api/snapshot/preview")).json()).sun);
+  check("setting the location gives sunrise and sunset", sun.sunrise !== null && sun.sunset !== null, JSON.stringify(sun));
+  await alex.goto(`${BASE}/#/home`);
+  await alex.waitForSelector("h2:has-text('Today on the Kindle')");
+  check("Home shows sunrise and sunset", (await alex.textContent("main")).includes("sunset"));
+  await sam.goto(`${BASE}/#/settings`);
+  await sam.waitForSelector("h2:has-text('Settings')");
+  check("a member does not see the location form", (await sam.locator("#loc-lat").count()) === 0);
+
   // ---- Source contains no credentials
   const html = await (await fetch(`${BASE}/`)).text();
   const js = await (await fetch(`${BASE}/app.js`)).text();

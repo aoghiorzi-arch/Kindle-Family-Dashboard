@@ -9,14 +9,14 @@
 |---|---|---|
 | Sunrise and sunset | `packages/core/src/sun.ts` | Ported from `app/solar.py`, with sunrise added. Times are rendered in the household zone. |
 | Weather | `packages/core/src/weather.ts`, `apps/api/src/scheduled.ts` | Open-Meteo current conditions, WMO code summaries, attribution carried into the snapshot. |
-| Calendar | `packages/core/src/calendar.ts` | iCalendar expansion with `ical.js`: recurrence, exclusions, all-day events, and private events masked as "Busy" before storage. |
+| Calendar | `packages/core/src/calendar.ts` | iCalendar expansion with `ical.js`: recurrence, exclusions, moved and cancelled occurrences, all-day events, and private events masked as "Busy" before storage. |
 | News | `packages/core/src/news.ts` | RSS and Atom titles only, up to three headlines, with the source name as attribution. No excerpts are stored. |
 | Daily thought | `packages/core/src/verse.ts` | Same index as the Python version. KJV text carried over, not yet checked against a printed Bible. |
 | Refresh policy | `packages/core/src/policy.ts` | Maximum age, minimum interval between attempts, exponential backoff capped at one hour. |
 | Cache | `infrastructure/cloudflare/migrations/0002_integrations.sql` | `provider_cache`: last good payload, timestamps, failure count and a short error code. |
 | Scheduled job | `apps/api/src/scheduled.ts`, `worker.ts` | Runs every 15 minutes. The only code that calls providers. |
 | Bounded fetch | `apps/api/src/feeds.ts` | https only, no credentials in the address, no redirects, a time limit and a size limit. |
-| Location | `PUT /api/admin/household/location` | Admin sets latitude and longitude for sunrise, sunset and weather. |
+| Location | `GET` and `PUT /api/admin/household/location`, Settings form | Admin sets latitude and longitude for sunrise, sunset and weather. Members do not see the form. |
 
 The display snapshot reads only the local database. It never calls a provider.
 
@@ -44,7 +44,7 @@ The display snapshot reads only the local database. It never calls a provider.
 | Bounds | Tests: redirects refused; oversized responses refused; non-https and credentialed calendar addresses refused without a network call; news limited to three feeds. |
 | Sunrise and sunset accuracy | Six locations compared with the independent library `astral` 3.2 (run once, outside the repository) and with the Python implementation. Agreement within one minute. |
 
-Results: `packages/core` **34 tests pass**; `apps/api` **65 tests pass**; Python prototype **227 tests pass**; browser checks **23 pass**.
+Results: `packages/core` **35 tests pass**; `apps/api` **66 tests pass**; Python prototype **227 tests pass**; browser checks **26 pass**.
 
 **Local Worker run:** migrations applied, the Worker started with the new dependencies, and the scheduled job triggered. The sandbox could not reach the providers, so each one recorded `unreachable`, and the snapshot still built with sunrise and sunset from the stored location.
 
@@ -59,12 +59,11 @@ Results: `packages/core` **34 tests pass**; `apps/api` **65 tests pass**; Python
 
 1. **D5 (providers) is not fully decided.** Weather defaults to Open-Meteo. News has no default feed. The owner must confirm the weather terms and choose news sources.
 2. **Calendar data is not encrypted at rest in D1.** The Python prototype encrypted feed text. The Worker stores masked event titles and times unencrypted. Decide whether that is acceptable, or add encryption before the calendar goes live.
-3. **Recurrence overrides are not applied.** A series with a moved occurrence is skipped entirely and counted. Applying overrides is a follow-up.
-4. **Calendar and news serve one household** (`HOUSEHOLD_ID`). Multi-household integrations need per-household configuration.
-5. **No Settings screen for location.** Set it through the API for now. Weather and sunrise stay empty until a location is set.
-6. **Outbound addresses are not pinned to an IP address.** Workers cannot pin resolved addresses. Feed addresses come from operator secrets, not from users. Acceptable for a private family deployment; revisit before any wider use.
-7. **Calendar text is re-read every 15 minutes** over a seven-day window. Very large feeds hit the two-megabyte limit and are refused with `too_large`.
-8. **Scheduled job timing** under Cloudflare's real cron is not measured. The local trigger ran once.
+3. **Calendar and news serve one household** (`HOUSEHOLD_ID`). Multi-household integrations need per-household configuration.
+4. **Outbound addresses are not pinned to an IP address.** Workers cannot pin resolved addresses. Feed addresses come from operator secrets, not from users. Acceptable for a private family deployment; revisit before any wider use.
+5. **Calendar text is re-read every 15 minutes** over a seven-day window. Very large feeds hit the two-megabyte limit and are refused with `too_large`.
+6. **Scheduled job timing** under Cloudflare's real cron is not measured. The local trigger ran once.
+7. **Moved occurrences** are applied from the feed's own override records. A series with an occurrence in an unknown time zone is still skipped and counted.
 
 ## Rollback
 

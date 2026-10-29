@@ -39,10 +39,24 @@ test("an excluded occurrence is left out of the series", () => {
   assert.ok(breakfast.includes("2026-10-29T07:00:00.000Z"));
 });
 
-test("a series with a moved occurrence is skipped whole, not shown at the wrong time", () => {
-  const { events, skipped } = expandCalendar(fixture("basic.ics"), DAY_FROM, DAY_TO, "Europe/London");
+test("a moved occurrence takes its new time, and the original time is not shown", () => {
+  const { events } = expandCalendar(fixture("basic.ics"), DAY_FROM, DAY_TO, "Europe/London");
+  const meetings = events.filter((e) => e.title === "Moved meeting").map((e) => e.startUtc);
+  assert.deepEqual(meetings, ["2026-10-29T14:00:00.000Z"]);
+});
+
+test("a cancelled occurrence is removed from the series", () => {
+  const ics = fixture("basic.ics").replace("END:VCALENDAR", `BEGIN:VEVENT
+UID:fixture-override
+RECURRENCE-ID;TZID=Europe/London:20261029T120000
+DTSTAMP:20261001T000000Z
+DTSTART;TZID=Europe/London:20261029T120000
+STATUS:CANCELLED
+SUMMARY:Moved meeting
+END:VEVENT
+END:VCALENDAR`);
+  const { events } = expandCalendar(ics, DAY_FROM, DAY_TO, "Europe/London");
   assert.equal(events.some((e) => e.title === "Moved meeting"), false);
-  assert.ok(skipped >= 2, `skipped ${skipped}`);
 });
 
 test("an unknown time zone is skipped and counted, not guessed", () => {

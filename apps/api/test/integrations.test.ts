@@ -160,15 +160,26 @@ test("private calendar titles are masked before they are stored, so the cache ne
   assert.ok(row.payload.includes("Busy"));
 });
 
-test("the cached calendar payload is read back for the snapshot, showing only today's events", async () => {
+test("the cached calendar payload is read back for the snapshot: today's events, in order, with overflow counted", async () => {
   const { env, display } = await setup({ location: false });
   await runScheduled(env, NOW, fakeFetch(allRoutes()).fetcher);
   const snap = await readSnapshot(env, display.token);
+  // Today (29 October, London): all-day, then the moved breakfast, moved meeting, school pickup, and the private event.
+  // Only four are shown; the private one is counted in the overflow, and its title is never present.
   const titles = snap.calendar.events.map((e: { title: string }) => e.title);
-  assert.ok(titles.includes("School pickup"));
-  assert.ok(titles.includes("Busy"));
-  assert.equal(titles.some((t: string) => t.includes("Synthetic private")), false);
-  assert.equal(titles.includes("Breakfast club") && snap.calendar.events.every((e: { time: string | null }) => e.time !== null || e.time === null), true);
+  assert.deepEqual(titles, ["Family day", "Breakfast club", "Moved meeting", "School pickup"]);
+  assert.equal(snap.calendar.overflow, 1);
+  assert.equal(JSON.stringify(snap).includes("Synthetic private"), false);
+});
+
+test("a private event that is shown displays as Busy with no time leak beyond its start", async () => {
+  const { env, display } = await setup({ location: false });
+  // Private event alone in the window.
+  const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nBEGIN:VEVENT\r\nUID:only-private\r\nDTSTAMP:20261001T000000Z\r\nDTSTART:20261029T120000Z\r\nDTEND:20261029T130000Z\r\nSUMMARY:Doctor visit\r\nCLASS:PRIVATE\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+  const feeds = fakeFetch({ "https://calendar.example.test/": () => new Response(ics, { status: 200 }) });
+  await runScheduled(env, NOW, feeds.fetcher);
+  const snap = await readSnapshot(env, display.token);
+  assert.deepEqual(snap.calendar.events, [{ title: "Busy", time: "12:00", private: true }]);
 });
 
 test("the news feed list must be a JSON array of at most three URLs", () => {
@@ -193,6 +204,8 @@ test("the location endpoint is admin-only, validated and needs CSRF", async () =
   assert.equal((await handle(request("/api/admin/household/location", { method: "PUT", body: { latitude: 120, longitude: 0 }, cookie: alex.cookie, csrf: alex.csrf }), env)).status, 400);
   const ok = await handle(request("/api/admin/household/location", { method: "PUT", body, cookie: alex.cookie, csrf: alex.csrf }), env);
   assert.equal(ok.status, 200);
+  const read = (await (await handle(request("/api/admin/household/location", { cookie: alex.cookie }), env)).json()) as { latitude: number };
+  assert.equal(read.latitude, 55.9533);
   const cleared = await handle(request("/api/admin/household/location", { method: "PUT", body: { latitude: null, longitude: null }, cookie: alex.cookie, csrf: alex.csrf }), env);
   assert.equal(cleared.status, 200);
 });

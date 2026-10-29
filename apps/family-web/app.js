@@ -310,12 +310,52 @@ function settingsView() {
       el("button", { type: "button", on: { click: signOut } }, "Sign out"),
     ),
   ];
-  if (s.role === "admin") children.push(devicesSection());
+  if (s.role === "admin") children.push(locationSection(), devicesSection());
   children.push(el("div", { class: "card" },
     el("h3", {}, "Shopping Shortcut"),
     el("p", { class: "muted" }, "Follow shortcuts/README.md in the repository to add items from Siri or the Shortcuts app. Never share a Shortcut that contains a token."),
   ));
   return el("section", {}, children);
+}
+
+// Latitude and longitude drive sunrise, sunset and weather. Blank both to clear them.
+function locationSection() {
+  const lat = el("input", { type: "text", id: "loc-lat", inputmode: "decimal", autocomplete: "off", "aria-describedby": "loc-help" });
+  const lon = el("input", { type: "text", id: "loc-lon", inputmode: "decimal", autocomplete: "off", "aria-describedby": "loc-help" });
+  const save = async (latitude, longitude) => {
+    try {
+      const saved = await api("/api/admin/household/location", { method: "PUT", body: { latitude, longitude }, csrf: state.session.csrfToken });
+      setStatus(saved.latitude === null ? "Location cleared." : "Location saved.");
+      lat.value = saved.latitude === null ? "" : String(saved.latitude);
+      lon.value = saved.longitude === null ? "" : String(saved.longitude);
+    } catch {
+      setStatus("Check the latitude (-90 to 90) and longitude (-180 to 180).", true);
+    }
+  };
+  api("/api/admin/household/location").then((current) => {
+    lat.value = current.latitude === null ? "" : String(current.latitude);
+    lon.value = current.longitude === null ? "" : String(current.longitude);
+  }).catch(() => {});
+  return el("section", { class: "card" },
+    el("h2", { tabindex: "-1" }, "Household location"),
+    el("p", { id: "loc-help", class: "muted" }, "Used for sunrise, sunset and weather. Decimal degrees, for example 51.5074 and -0.1278."),
+    el("form", {
+      class: "stack",
+      on: {
+        submit: (event) => {
+          event.preventDefault();
+          const latitude = lat.value.trim() === "" ? null : Number(lat.value);
+          const longitude = lon.value.trim() === "" ? null : Number(lon.value);
+          save(latitude, longitude);
+        },
+      },
+    },
+    el("label", { for: "loc-lat" }, "Latitude"), lat,
+    el("label", { for: "loc-lon" }, "Longitude"), lon,
+    el("div", { class: "row" },
+      el("button", { type: "submit", class: "primary" }, "Save location"),
+      el("button", { type: "button", on: { click: () => save(null, null) } }, "Clear location"))),
+  );
 }
 
 function devicesSection() {

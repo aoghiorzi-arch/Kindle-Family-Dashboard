@@ -35,6 +35,7 @@ const ROUTES: Route[] = [
   { method: "GET", pattern: /^\/api\/device\/snapshot$/, run: (req, env, now) => h.deviceSnapshot(req, env, now) },
   { method: "GET", pattern: /^\/api\/snapshot\/preview$/, run: (req, env, now) => h.snapshotPreview(req, env, now) },
   { method: "GET", pattern: /^\/api\/admin\/devices$/, run: (req, env, now) => h.listDevices(req, env, now) },
+  { method: "GET", pattern: /^\/api\/admin\/household\/location$/, run: (req, env, now) => h.getLocation(req, env, now) },
   { method: "PUT", pattern: /^\/api\/admin\/household\/location$/, run: (req, env, now) => h.setLocation(req, env, now) },
   { method: "POST", pattern: /^\/api\/admin\/devices$/, run: (req, env, now) => h.createDevice(req, env, now) },
   {

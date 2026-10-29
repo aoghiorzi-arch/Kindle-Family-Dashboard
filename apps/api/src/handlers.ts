@@ -349,6 +349,16 @@ export async function revokeDevice(request: Request, env: Env, now: Date, rawId:
 
 // ---- Admin: household location (sunrise, sunset, weather) --------------------
 
+export async function getLocation(request: Request, env: Env, now: Date): Promise<Response> {
+  // Read-only: no CSRF token is needed for a GET, but the caller must still be an admin.
+  const session = await requireSession(request, env, now);
+  if (session.role !== "admin") throw new HttpError(403, "forbidden", "Admin access required");
+  const row = await env.DB.prepare("SELECT latitude, longitude FROM households WHERE id = ?")
+    .bind(session.householdId)
+    .first<{ latitude: number | null; longitude: number | null }>();
+  return json({ latitude: row?.latitude ?? null, longitude: row?.longitude ?? null });
+}
+
 export async function setLocation(request: Request, env: Env, now: Date): Promise<Response> {
   const session = await requireAdmin(request, env, now);
   const body = await readJson(request);
