@@ -1,11 +1,12 @@
 // Test harness: real handlers and real migration SQL, with node:sqlite standing in for D1.
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { D1Database, D1PreparedStatement, Env } from "../src/env.ts";
 import { handle } from "../src/worker.ts";
 
-export const MIGRATION = fileURLToPath(new URL("../../../infrastructure/cloudflare/migrations/0001_init.sql", import.meta.url));
+export const MIGRATIONS_DIR = fileURLToPath(new URL("../../../infrastructure/cloudflare/migrations/", import.meta.url));
+export const MIGRATION = `${MIGRATIONS_DIR}0001_init.sql`;
 export const ORIGIN = "https://family.test";
 
 class SqliteStatement implements D1PreparedStatement {
@@ -42,10 +43,12 @@ class SqliteStatement implements D1PreparedStatement {
   }
 }
 
+// Applies every migration in order, exactly as `wrangler d1 migrations apply` does.
 export function openDatabase(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
-  db.exec(readFileSync(MIGRATION, "utf8"));
+  const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
+  for (const file of files) db.exec(readFileSync(`${MIGRATIONS_DIR}${file}`, "utf8"));
   return db;
 }
 

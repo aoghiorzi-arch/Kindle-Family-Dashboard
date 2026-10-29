@@ -139,15 +139,33 @@ function homeView() {
   const snap = state.snapshot;
   const expired = snap && Date.now() > Date.parse(snap.expiresAt);
   const items = snap?.shopping.items ?? [];
+  const events = snap?.calendar.events ?? [];
+  const headlines = snap?.news.headlines ?? [];
   return el("section", {},
     el("h2", { tabindex: "-1" }, "Today on the Kindle"),
     el("p", { class: "muted" }, "This is the picture the display receives. It updates when the list changes."),
     el("div", { class: `card${expired ? " stale" : ""}` },
       el("p", {}, `Date: ${snap?.localDate ?? "unknown"} (${snap?.timezone ?? ""})`),
-      el("p", {}, snap?.weather.summary ? `Weather: ${snap.weather.summary}` : "Weather is not connected yet."),
-      el("p", {}, "Calendar is not connected yet."),
-      el("p", {}, `Shopping: ${snap?.shopping.remainingCount ?? 0} to get`),
+      el("h3", {}, "Weather"),
+      snap?.weather.summary
+        ? el("p", {}, `${snap.weather.summary}, ${snap.weather.temperatureC}°C`)
+        : el("p", { class: "muted" }, "Weather is not available yet."),
+      snap?.weather.attribution ? el("p", { class: "badge" }, snap.weather.attribution) : null,
+      snap?.sun.sunset ? el("p", {}, `Sunrise ${snap.sun.sunrise ?? "—"}, sunset ${snap.sun.sunset}`) : null,
+      el("h3", {}, "Coming up"),
+      events.length
+        ? el("ul", {}, events.map((e) => el("li", {}, `${e.time ?? "All day"} ${e.title}`)))
+        : el("p", { class: "muted" }, "No calendar events today."),
+      el("h3", {}, "Shopping"),
+      el("p", {}, `${snap?.shopping.remainingCount ?? 0} to get`),
       items.length ? el("ul", { class: "muted" }, items.map((item) => el("li", {}, item.title))) : null,
+      el("h3", {}, "News"),
+      headlines.length
+        ? el("ul", {}, headlines.map((h) => el("li", {}, `${h.title} (${h.source})`)))
+        : el("p", { class: "muted" }, "No headlines."),
+      el("h3", {}, "A thought for today"),
+      snap?.reflection.text ? el("p", {}, `“${snap.reflection.text}”`) : null,
+      snap?.reflection.attribution ? el("p", { class: "badge" }, snap.reflection.attribution) : null,
       snap ? el("p", { class: "badge" }, `Generated ${formatTime(snap.generatedAt)}`) : null,
       expired
         ? el("p", { role: "note" }, "This picture is more than 20 minutes old. The Kindle may still show an earlier one.")

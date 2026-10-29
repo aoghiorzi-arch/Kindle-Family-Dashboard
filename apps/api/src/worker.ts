@@ -2,6 +2,7 @@
 import type { Env } from "./env.ts";
 import { errorResponse, HttpError, json } from "./http.ts";
 import * as h from "./handlers.ts";
+import { runScheduled } from "./scheduled.ts";
 
 type Route = {
   method: string;
@@ -34,6 +35,7 @@ const ROUTES: Route[] = [
   { method: "GET", pattern: /^\/api\/device\/snapshot$/, run: (req, env, now) => h.deviceSnapshot(req, env, now) },
   { method: "GET", pattern: /^\/api\/snapshot\/preview$/, run: (req, env, now) => h.snapshotPreview(req, env, now) },
   { method: "GET", pattern: /^\/api\/admin\/devices$/, run: (req, env, now) => h.listDevices(req, env, now) },
+  { method: "PUT", pattern: /^\/api\/admin\/household\/location$/, run: (req, env, now) => h.setLocation(req, env, now) },
   { method: "POST", pattern: /^\/api\/admin\/devices$/, run: (req, env, now) => h.createDevice(req, env, now) },
   {
     method: "POST",
@@ -68,6 +70,18 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
   }
 }
 
+// Cron entry point: refreshes provider caches. Failures are logged by error name only.
+export async function scheduledJob(env: Env, now: Date = new Date()): Promise<void> {
+  try {
+    await runScheduled(env, now);
+  } catch (error) {
+    console.error("scheduled job failed", error instanceof Error ? error.name : "unknown");
+  }
+}
+
 export default {
   fetch: (request: Request, env: Env) => handle(request, env),
+  scheduled: (_controller: unknown, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }) => {
+    ctx.waitUntil(scheduledJob(env));
+  },
 };

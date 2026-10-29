@@ -10,7 +10,11 @@ import {
   sessionCookie,
   type MemberSession,
 } from "./auth.ts";
+import { cachedPayload, type CachedCalendar, type CachedNews, type CachedWeather } from "./scheduled.ts";
 import {
+  localDate,
+  thoughtForDate,
+  WEATHER_ATTRIBUTION,
   buildSnapshot,
   generateApiToken,
   LIST_LIMIT,
@@ -198,17 +202,37 @@ export async function deleteItem(request: Request, env: Env, now: Date, rawId: s
 // ---- Device snapshot -------------------------------------------------------
 
 // The same snapshot the Kindle receives, built for the household behind a credential.
+// Reads only the local database. Provider data comes from the cache the scheduled job maintains.
 async function householdSnapshot(env: Env, householdId: string, now: Date): Promise<Record<string, unknown>> {
-  const household = await env.DB.prepare("SELECT timezone FROM households WHERE id = ?")
+  const household = await env.DB.prepare("SELECT timezone, latitude, longitude FROM households WHERE id = ?")
     .bind(householdId)
-    .first<{ timezone: string }>();
+    .first<{ timezone: string; latitude: number | null; longitude: number | null }>();
   if (!household) throw new HttpError(404, "not_found", "Household not found");
   const { results } = await env.DB.prepare(
     "SELECT title FROM shopping_items WHERE household_id = ? AND done = 0 ORDER BY position, created_at",
   )
     .bind(householdId)
     .all<{ title: string }>();
-  return buildSnapshot({ now, timezone: household.timezone, unchecked: results });
+
+  const weather = await cachedPayload<CachedWeather>(env, householdId, "weather");
+  const calendar = await cachedPayload<CachedCalendar>(env, householdId, "calendar");
+  const news = await cachedPayload<CachedNews>(env, householdId, "news");
+  const thought = await thoughtForDate(localDate(now, household.timezone));
+
+  return buildSnapshot({
+    now,
+    timezone: household.timezone,
+    unchecked: results,
+    location: household.latitude !== null && household.longitude !== null
+      ? { latitude: household.latitude, longitude: household.longitude }
+      : null,
+    weather: weather
+      ? { temperatureC: weather.data.temperatureC, summary: weather.data.summary, fetchedAt: weather.fetchedAt, attribution: WEATHER_ATTRIBUTION }
+      : null,
+    events: calendar?.data.events ?? [],
+    news: news?.data.headlines ?? [],
+    thought,
+  });
 }
 
 function snapshotResponse(request: Request, snapshot: Record<string, unknown>): Response {
@@ -321,4 +345,22 @@ export async function revokeDevice(request: Request, env: Env, now: Date, rawId:
     .run();
   if (result.meta.changes === 0) throw new HttpError(404, "not_found", "Device not found");
   return json({ ok: true });
+}
+
+// ---- Admin: household location (sunrise, sunset, weather) --------------------
+
+export async function setLocation(request: Request, env: Env, now: Date): Promise<Response> {
+  const session = await requireAdmin(request, env, now);
+  const body = await readJson(request);
+  const latitude = body.latitude ?? null;
+  const longitude = body.longitude ?? null;
+  const bothEmpty = latitude === null && longitude === null;
+  const valid = (value: unknown, limit: number) => typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= limit;
+  if (!bothEmpty && !(valid(latitude, 90) && valid(longitude, 180))) {
+    throw new HttpError(400, "validation_failed", "latitude must be -90 to 90 and longitude -180 to 180, or both null");
+  }
+  await env.DB.prepare("UPDATE households SET latitude = ?, longitude = ? WHERE id = ?")
+    .bind(latitude, longitude, session.householdId)
+    .run();
+  return json({ latitude, longitude });
 }

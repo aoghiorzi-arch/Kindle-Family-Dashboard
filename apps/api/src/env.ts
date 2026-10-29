@@ -22,4 +22,9 @@ export interface Env {
   ENVIRONMENT?: string;
   // Exact origin of the family web app, for CSRF checks on writes, for example https://family.example
   PUBLIC_ORIGIN: string;
+  // Integrations (Phase 5). Feed addresses are secrets. Calendar and news serve one household (HOUSEHOLD_ID) for now.
+  CALENDAR_FEED_URL?: string;
+  HOUSEHOLD_ID?: string;
+  // JSON array of up to three https RSS or Atom URLs.
+  NEWS_FEED_URLS?: string;
 }

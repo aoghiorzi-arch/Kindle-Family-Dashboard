@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { MIGRATION, openDatabase } from "./helpers.ts";
 
-const TABLES = ["api_tokens", "devices", "households", "members", "sessions", "shopping_items"];
+const TABLES = ["api_tokens", "devices", "households", "members", "provider_cache", "sessions", "shopping_items"];
 
 function tables(db: DatabaseSync): string[] {
   return (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[])

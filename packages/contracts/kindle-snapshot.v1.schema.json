@@ -52,50 +52,92 @@
     "clock": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["display24h"],
+      "required": [
+        "display24h"
+      ],
       "properties": {
-        "display24h": { "type": "boolean" }
+        "display24h": {
+          "type": "boolean"
+        }
       }
     },
     "weather": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["temperatureC", "summary", "updatedAt"],
+      "required": [
+        "temperatureC",
+        "summary",
+        "updatedAt",
+        "attribution"
+      ],
       "description": "All values may be null when weather is unavailable. Null means the device shows an explicit empty state, not zero.",
       "properties": {
         "temperatureC": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": -60,
           "maximum": 60
         },
         "summary": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 40
         },
         "updatedAt": {
-          "anyOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }],
+          "anyOf": [
+            {
+              "$ref": "#/$defs/utcTimestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "description": "When the provider last supplied this value. Used to show an age when the value is old."
+        },
+        "attribution": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 80,
+          "description": "Credit the data provider requires wherever this value is shown, for example CC BY 4.0 attribution for Open-Meteo."
         }
       }
     },
     "sun": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sunrise", "sunset"],
+      "required": [
+        "sunrise",
+        "sunset"
+      ],
       "properties": {
-        "sunrise": { "$ref": "#/$defs/localTime" },
-        "sunset": { "$ref": "#/$defs/localTime" }
+        "sunrise": {
+          "$ref": "#/$defs/localTime"
+        },
+        "sunset": {
+          "$ref": "#/$defs/localTime"
+        }
       }
     },
     "calendar": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["events", "overflow"],
+      "required": [
+        "events",
+        "overflow"
+      ],
       "properties": {
         "events": {
           "type": "array",
           "maxItems": 4,
-          "items": { "$ref": "#/$defs/event" }
+          "items": {
+            "$ref": "#/$defs/event"
+          }
         },
         "overflow": {
           "type": "integer",
@@ -108,18 +150,30 @@
     "shopping": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["remainingCount", "items", "overflow"],
+      "required": [
+        "remainingCount",
+        "items",
+        "overflow"
+      ],
       "properties": {
-        "remainingCount": { "type": "integer", "minimum": 0, "maximum": 999 },
+        "remainingCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
         "items": {
           "type": "array",
           "maxItems": 7,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["title"],
+            "required": [
+              "title"
+            ],
             "properties": {
-              "title": { "$ref": "#/$defs/shortText" }
+              "title": {
+                "$ref": "#/$defs/shortText"
+              }
             }
           }
         },
@@ -134,14 +188,23 @@
     "reflection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "attribution"],
+      "required": [
+        "text",
+        "attribution"
+      ],
       "properties": {
         "text": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 240
         },
         "attribution": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 80
         }
       }
@@ -149,7 +212,9 @@
     "news": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["headlines"],
+      "required": [
+        "headlines"
+      ],
       "properties": {
         "headlines": {
           "type": "array",
@@ -157,10 +222,19 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["title", "source"],
+            "required": [
+              "title",
+              "source"
+            ],
             "properties": {
-              "title": { "$ref": "#/$defs/shortText" },
-              "source": { "type": "string", "minLength": 1, "maxLength": 40 }
+              "title": {
+                "$ref": "#/$defs/shortText"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
             }
           }
         }
@@ -171,7 +245,14 @@
       "uniqueItems": true,
       "maxItems": 6,
       "items": {
-        "enum": ["clock", "weather", "calendar", "shopping", "reflection", "news"]
+        "enum": [
+          "clock",
+          "weather",
+          "calendar",
+          "shopping",
+          "reflection",
+          "news"
+        ]
       }
     }
   },
@@ -183,8 +264,23 @@
           "properties": {
             "events": {
               "items": {
-                "if": { "properties": { "private": { "const": true } }, "required": ["private"] },
-                "then": { "properties": { "title": { "const": "Busy" } } }
+                "if": {
+                  "properties": {
+                    "private": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "private"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "title": {
+                      "const": "Busy"
+                    }
+                  }
+                }
               }
             }
           }
@@ -202,7 +298,10 @@
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
     },
     "localTime": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
     },
     "shortText": {
@@ -213,11 +312,21 @@
     "event": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["title", "time", "private"],
+      "required": [
+        "title",
+        "time",
+        "private"
+      ],
       "properties": {
-        "title": { "$ref": "#/$defs/shortText" },
-        "time": { "$ref": "#/$defs/localTime" },
-        "private": { "type": "boolean" }
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "time": {
+          "$ref": "#/$defs/localTime"
+        },
+        "private": {
+          "type": "boolean"
+        }
       }
     }
   }

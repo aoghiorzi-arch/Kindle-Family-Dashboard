@@ -9,6 +9,10 @@ database_name = "kfd"
 database_id = "local-development-only"
 migrations_dir = "migrations"
 
+# Scheduled job: refreshes weather, calendar and news caches. The rate limits in packages/core decide what really runs.
+[triggers]
+crons = ["*/15 * * * *"]
+
 [vars]
 # Set in the production dashboard or via `wrangler secret`, never committed.
 # Local development values come from infrastructure/cloudflare/.dev.vars (git-ignored).
