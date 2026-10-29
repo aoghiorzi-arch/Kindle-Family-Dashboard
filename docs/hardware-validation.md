@@ -35,22 +35,9 @@ find "/Volumes/<Kindle-volume>" -maxdepth 2 -not -name '.*' | sort > ~/KindleInv
 
 Review the inventory for folders that suggest earlier modification or unknown software. Examples to note, not conclude from: `extensions`, `KUAL`, `MRPI`, `usbnet`, unexpected `.sh`/`.bin` files, or any folder you do not recognise. Record counts and names of suspicious folders only, not file contents.
 
-### H0.3 Back up user-visible storage (read-only source)
+### H0.3 Backup — waived by owner (29 October 2026)
 
-```bash
-BACKUP=~/KindleBackups/$(date +%F)
-mkdir -p "$BACKUP"
-rsync -av --exclude '.Spotlight-V100' --exclude '.fseventsd' --exclude '.Trashes' \
-  "/Volumes/<Kindle-volume>/" "$BACKUP/"
-```
-
-Then verify, from the Mac side only:
-
-```bash
-diff -rq "/Volumes/<Kindle-volume>/" "$BACKUP/" | grep -v -e 'Spotlight' -e 'fseventsd' -e 'Trashes' || echo "no differences"
-```
-
-Record the backup location **on your Mac only**. Do not commit the backup. Do not open the Kindle in Finder during the copy, to avoid macOS writing metadata files to it.
+The owner reports the device holds no user content, so no backup is being made. This waives the plan's §2 backup requirement for H0 only. H0.2 still lists what is on the volume, to confirm that claim. If anything personal turns up, stop and make a backup before continuing.
 
 ### H0.4 Safe eject and reconnect
 
