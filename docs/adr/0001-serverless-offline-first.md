@@ -28,7 +28,7 @@ The Kindle Touch (D01200, firmware 5.3.7.3) is unverified for HTTPS, clock, susp
 
 ## Decisions (D1–D6 accepted at defaults)
 
-D1 still requires the Phase 2a runtime spike to confirm the dependency results before any port begins.
+D1 spike (29 October 2026, partly complete): the TypeScript default stands. Two of the three Python dependencies are unverified in Pyodide, and the ICS subprocess isolation has to be rebuilt in any runtime. See [`../D1-runtime-spike.md`](../D1-runtime-spike.md).
 
 | ID | Question | Default if not decided | Notes |
 |---|---|---|---|
