@@ -6,3 +6,8 @@ data/
 backups/
 *.sqlite3
 *.sqlite3-*
+
+# Cloudflare local dev
+.dev.vars
+.wrangler/
+apps/api/node_modules/

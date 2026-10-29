@@ -1,0 +1,22 @@
+{
+  "name": "@kfd/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Family Hub Cloudflare Worker: authenticated API, shopping, device snapshot.",
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev --config ../../infrastructure/cloudflare/wrangler.toml --local",
+    "db:migrate:local": "wrangler d1 migrations apply kfd --local --config ../../infrastructure/cloudflare/wrangler.toml"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "ajv": "^8.17.1",
+    "typescript": "^5.6.3",
+    "wrangler": "^4.155.0"
+  }
+}

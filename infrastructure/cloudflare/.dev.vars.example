@@ -1,0 +1,4 @@
+# Copy to infrastructure/cloudflare/.dev.vars (git-ignored) for local development only.
+# ENVIRONMENT=local enables the development sign-in route. Any other value disables it.
+ENVIRONMENT=local
+PUBLIC_ORIGIN=http://localhost:8787
