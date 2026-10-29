@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "revision": "fixture-long-a",
+  "generatedAt": "2026-10-29T08:00:00Z",
+  "expiresAt": "2026-10-29T08:20:00Z",
+  "timezone": "Europe/London",
+  "localDate": "2026-10-29",
+  "clock": {
+    "display24h": true
+  },
+  "weather": {
+    "temperatureC": -12,
+    "summary": "Heavy snow showers with gusty winds",
+    "updatedAt": "2026-10-29T07:45:00Z"
+  },
+  "sun": {
+    "sunrise": "07:12",
+    "sunset": "17:03"
+  },
+  "calendar": {
+    "events": [
+      {
+        "title": "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+        "time": "09:00",
+        "private": false
+      },
+      {
+        "title": "Busy",
+        "time": "10:00",
+        "private": true
+      },
+      {
+        "title": "A very long family event title that fills the limit",
+        "time": "12:00",
+        "private": false
+      },
+      {
+        "title": "Another event title at the length limit for the list here",
+        "time": "23:59",
+        "private": false
+      }
+    ],
+    "overflow": 12
+  },
+  "shopping": {
+    "remainingCount": 19,
+    "items": [
+      {
+        "title": "Item 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "title": "Item 1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "title": "Item 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "title": "Item 3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "title": "Item 4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "title": "Item 5 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "title": "Item 6 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    ],
+    "overflow": 12
+  },
+  "reflection": {
+    "text": "Long sample text. Long sample text. Long sample text. Long sample text. Long sample text. Long sample text. Long sample text. Long sample text. Long sample text. Long sample text. Long sample text. Long sample text. ",
+    "attribution": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "news": {
+    "headlines": [
+      {
+        "title": "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH",
+        "source": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+      },
+      {
+        "title": "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH",
+        "source": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+      },
+      {
+        "title": "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH",
+        "source": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+      }
+    ]
+  },
+  "modules": [
+    "clock",
+    "weather",
+    "calendar",
+    "shopping",
+    "reflection",
+    "news"
+  ]
+}

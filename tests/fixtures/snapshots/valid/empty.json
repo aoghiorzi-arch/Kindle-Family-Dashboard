@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "revision": "fixture-2026-10-29-a",
+  "generatedAt": "2026-10-29T08:00:00Z",
+  "expiresAt": "2026-10-29T08:20:00Z",
+  "timezone": "Europe/London",
+  "localDate": "2026-10-29",
+  "clock": {
+    "display24h": true
+  },
+  "weather": {
+    "temperatureC": null,
+    "summary": null,
+    "updatedAt": null
+  },
+  "sun": {
+    "sunrise": null,
+    "sunset": null
+  },
+  "calendar": {
+    "events": [],
+    "overflow": 0
+  },
+  "shopping": {
+    "remainingCount": 0,
+    "items": [],
+    "overflow": 0
+  },
+  "reflection": {
+    "text": null,
+    "attribution": null
+  },
+  "news": {
+    "headlines": []
+  },
+  "modules": [
+    "clock",
+    "weather"
+  ]
+}

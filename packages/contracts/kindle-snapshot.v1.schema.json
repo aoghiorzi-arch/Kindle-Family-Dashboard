@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kfd.invalid/contracts/kindle-snapshot.v1.schema.json",
+  "title": "Kindle snapshot, schema version 1",
+  "description": "Minimal, read-only, precomputed display snapshot. Contains no credentials, provider tokens, calendar URLs or edit endpoints. Field limits are part of the contract: a snapshot that exceeds them is invalid, and the device must keep its last good copy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "revision",
+    "generatedAt",
+    "expiresAt",
+    "timezone",
+    "localDate",
+    "clock",
+    "weather",
+    "sun",
+    "calendar",
+    "shopping",
+    "reflection",
+    "news",
+    "modules"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "Breaking changes increment this. The device must reject unknown major versions."
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}$",
+      "description": "Opaque version identifier. Changes whenever content changes."
+    },
+    "generatedAt": {
+      "$ref": "#/$defs/utcTimestamp"
+    },
+    "expiresAt": {
+      "$ref": "#/$defs/utcTimestamp",
+      "description": "After this time the device shows the content as stale. It does not blank the screen."
+    },
+    "timezone": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)+$",
+      "description": "IANA zone name, for example Europe/London. Display times are rendered in this zone."
+    },
+    "localDate": {
+      "$ref": "#/$defs/localDate",
+      "description": "The calendar date in the household timezone at generation time."
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["display24h"],
+      "properties": {
+        "display24h": { "type": "boolean" }
+      }
+    },
+    "weather": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperatureC", "summary", "updatedAt"],
+      "description": "All values may be null when weather is unavailable. Null means the device shows an explicit empty state, not zero.",
+      "properties": {
+        "temperatureC": {
+          "type": ["integer", "null"],
+          "minimum": -60,
+          "maximum": 60
+        },
+        "summary": {
+          "type": ["string", "null"],
+          "maxLength": 40
+        },
+        "updatedAt": {
+          "anyOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }],
+          "description": "When the provider last supplied this value. Used to show an age when the value is old."
+        }
+      }
+    },
+    "sun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sunrise", "sunset"],
+      "properties": {
+        "sunrise": { "$ref": "#/$defs/localTime" },
+        "sunset": { "$ref": "#/$defs/localTime" }
+      }
+    },
+    "calendar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["events", "overflow"],
+      "properties": {
+        "events": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/event" }
+        },
+        "overflow": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999,
+          "description": "Number of further events not included in the list."
+        }
+      }
+    },
+    "shopping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["remainingCount", "items", "overflow"],
+      "properties": {
+        "remainingCount": { "type": "integer", "minimum": 0, "maximum": 999 },
+        "items": {
+          "type": "array",
+          "maxItems": 7,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title"],
+            "properties": {
+              "title": { "$ref": "#/$defs/shortText" }
+            }
+          }
+        },
+        "overflow": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999,
+          "description": "Unchecked items beyond the included list."
+        }
+      }
+    },
+    "reflection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "attribution"],
+      "properties": {
+        "text": {
+          "type": ["string", "null"],
+          "maxLength": 240
+        },
+        "attribution": {
+          "type": ["string", "null"],
+          "maxLength": 80
+        }
+      }
+    },
+    "news": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headlines"],
+      "properties": {
+        "headlines": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "source"],
+            "properties": {
+              "title": { "$ref": "#/$defs/shortText" },
+              "source": { "type": "string", "minLength": 1, "maxLength": 40 }
+            }
+          }
+        }
+      }
+    },
+    "modules": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 6,
+      "items": {
+        "enum": ["clock", "weather", "calendar", "shopping", "reflection", "news"]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "Privacy rule: a private event must show only the neutral label, never its real title.",
+      "properties": {
+        "calendar": {
+          "properties": {
+            "events": {
+              "items": {
+                "if": { "properties": { "private": { "const": true } }, "required": ["private"] },
+                "then": { "properties": { "title": { "const": "Busy" } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "localDate": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "localTime": {
+      "type": ["string", "null"],
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    },
+    "shortText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "time", "private"],
+      "properties": {
+        "title": { "$ref": "#/$defs/shortText" },
+        "time": { "$ref": "#/$defs/localTime" },
+        "private": { "type": "boolean" }
+      }
+    }
+  }
+}

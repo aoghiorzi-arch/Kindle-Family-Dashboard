@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "revision": "fixture-stale-a",
+  "generatedAt": "2026-10-29T08:00:00Z",
+  "expiresAt": "2026-10-29T08:20:00Z",
+  "timezone": "Europe/London",
+  "localDate": "2026-10-29",
+  "clock": {
+    "display24h": true
+  },
+  "weather": {
+    "temperatureC": 14,
+    "summary": "Partly cloudy",
+    "updatedAt": "2026-10-26T06:00:00Z"
+  },
+  "sun": {
+    "sunrise": "07:12",
+    "sunset": "17:03"
+  },
+  "calendar": {
+    "events": [
+      {
+        "title": "School pickup",
+        "time": "15:30",
+        "private": false
+      },
+      {
+        "title": "Busy",
+        "time": "11:00",
+        "private": true
+      },
+      {
+        "title": "Swimming lessons",
+        "time": "17:00",
+        "private": false
+      },
+      {
+        "title": "Family dinner",
+        "time": "18:30",
+        "private": false
+      }
+    ],
+    "overflow": 0
+  },
+  "shopping": {
+    "remainingCount": 3,
+    "items": [
+      {
+        "title": "Milk"
+      },
+      {
+        "title": "Bread"
+      },
+      {
+        "title": "Apples"
+      }
+    ],
+    "overflow": 0
+  },
+  "reflection": {
+    "text": "A sample thought for testing only.",
+    "attribution": "Synthetic fixture"
+  },
+  "news": {
+    "headlines": [
+      {
+        "title": "Sample headline one",
+        "source": "Fixture Source"
+      },
+      {
+        "title": "Sample headline two",
+        "source": "Fixture Source"
+      }
+    ]
+  },
+  "modules": [
+    "clock",
+    "weather",
+    "calendar",
+    "shopping",
+    "reflection",
+    "news"
+  ]
+}
