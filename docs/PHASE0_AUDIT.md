@@ -134,6 +134,6 @@ Each item is one PR. None starts before the previous gate passes.
 - [x] ADR written with open decisions and rejected alternatives.
 - [x] Hardware and recovery checklists written as UNVERIFIED, with no device claims.
 - [x] Phased issue list and PR scope recorded.
-- [ ] Owner approves ADR-0001 and decisions D1–D6.
-- [ ] Owner approves the phase sequence.
+- [x] Owner accepts decisions D1–D6 at their stated defaults (29 October 2026).
+- [ ] Owner approves the phase sequence (not yet confirmed explicitly).
 - [ ] Owner confirms no device modification until H1 and explicit consent.

@@ -1,6 +1,6 @@
 # ADR 0001 — Serverless, offline-first architecture
 
-- **Status:** Proposed — awaiting user approval (Phase 0 gate)
+- **Status:** Accepted for decisions D1–D6 at their stated defaults (owner reply, 29 October 2026). The phase sequence still needs explicit sign-off.
 - **Date:** 29 October 2026
 - **Baseline:** commit `9a0bed5` on `claude/funny-hamilton-pfuhsz`
 - **Source:** [`SERVERLESS_MASTER_PLAN.md`](../SERVERLESS_MASTER_PLAN.md) §2–§3
@@ -26,11 +26,13 @@ The Kindle Touch (D01200, firmware 5.3.7.3) is unverified for HTTPS, clock, susp
 - Negative: vendor lock-in to Cloudflare; quota and pricing changes must be monitored; a runtime change (see D1) means some existing Python code must be re-implemented or run through a different path.
 - Neutral: the existing 214-test suite remains the regression oracle during migration.
 
-## Open decisions (must be resolved before Phase 3)
+## Decisions (D1–D6 accepted at defaults)
+
+D1 still requires the Phase 2a runtime spike to confirm the dependency results before any port begins.
 
 | ID | Question | Default if not decided | Notes |
 |---|---|---|---|
-| D1 | Worker runtime: TypeScript, or Python Workers? | TypeScript for the Worker; port logic into `packages/core` | Pillow, icalendar and cryptography are Python packages; Python Workers support for them is **UNVERIFIED**. |
+| D1 | Worker runtime: TypeScript, or Python Workers? | **Accepted:** TypeScript for the Worker; port logic into `packages/core` | Pillow, icalendar and cryptography are Python packages; Python Workers support for them is **UNVERIFIED**. |
 | D2 | Authentication provider | Managed provider if it supports iPhone Safari and Shortcuts tokens | Current scrypt/session model is a candidate to keep behind an adapter. |
 | D3 | Calendar source | Read-only private iCal feed behind an adapter | Feed URLs are bearer secrets; store only as Worker secrets. |
 | D4 | On-device render or server PNG | On-device render from JSON, proven at H2 | Server PNG is the fallback if H2 fails. |
