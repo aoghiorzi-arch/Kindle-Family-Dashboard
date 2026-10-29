@@ -1,6 +1,6 @@
 # ADR 0001 — Serverless, offline-first architecture
 
-- **Status:** Accepted for decisions D1–D6 at their stated defaults (owner reply, 29 October 2026). The phase sequence still needs explicit sign-off.
+- **Status:** Accepted for decisions D1–D6 at their stated defaults (owner reply, 29 October 2026). The phase sequence is approved (owner reply, 29 October 2026).
 - **Date:** 29 October 2026
 - **Baseline:** commit `9a0bed5` on `claude/funny-hamilton-pfuhsz`
 - **Source:** [`SERVERLESS_MASTER_PLAN.md`](../SERVERLESS_MASTER_PLAN.md) §2–§3

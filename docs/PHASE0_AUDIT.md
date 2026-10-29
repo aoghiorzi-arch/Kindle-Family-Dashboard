@@ -135,5 +135,5 @@ Each item is one PR. None starts before the previous gate passes.
 - [x] Hardware and recovery checklists written as UNVERIFIED, with no device claims.
 - [x] Phased issue list and PR scope recorded.
 - [x] Owner accepts decisions D1–D6 at their stated defaults (29 October 2026).
-- [ ] Owner approves the phase sequence (not yet confirmed explicitly).
-- [ ] Owner confirms no device modification until H1 and explicit consent.
+- [x] Owner approves the phase sequence (29 October 2026).
+- [x] Owner confirms no device modification until H1 and explicit consent.
