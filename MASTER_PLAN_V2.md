@@ -2,6 +2,8 @@
 
 **Date:** 28 October 2026
 **Status:** Persistent local Family Hub implemented; automatic frame lifecycle added. Verification evidence and remaining work: [`docs/PROGRESS.md`](docs/PROGRESS.md). **No authority** to modify Kindle firmware, install device-side software, connect to the physical device, deploy publicly or access production accounts.
+**Target architecture (29 October 2026):** superseded for hosting and runtime by the serverless plan, [`docs/SERVERLESS_MASTER_PLAN.md`](docs/SERVERLESS_MASTER_PLAN.md), pending approval of [`docs/adr/0001-serverless-offline-first.md`](docs/adr/0001-serverless-offline-first.md). This document still describes the local prototype.
+
 **Original specification:** [`docs/ORIGINAL_MASTER_PLAN.md`](docs/ORIGINAL_MASTER_PLAN.md) remains the product requirements/reference. Where these plans differ in *execution order or scope*, this v2 is the proposed working roadmap; it does **not** weaken the original security, hardware-safety or approval gates.
 
 ## Product goal
