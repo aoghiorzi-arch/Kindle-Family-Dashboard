@@ -33,7 +33,7 @@ D1 spike (29 October 2026, partly complete): the TypeScript default stands. Two 
 | ID | Question | Default if not decided | Notes |
 |---|---|---|---|
 | D1 | Worker runtime: TypeScript, or Python Workers? | **Accepted:** TypeScript for the Worker; port logic into `packages/core` | Pillow, icalendar and cryptography are Python packages; Python Workers support for them is **UNVERIFIED**. |
-| D2 | Authentication provider | Managed provider if it supports iPhone Safari and Shortcuts tokens | Current scrypt/session model is a candidate to keep behind an adapter. |
+| D2 | Authentication provider | **Accepted: Cloudflare Access** with email one-time codes (owner choice). Device and Shortcut credentials stay with the Worker. See [`../SIGN_IN_ACCESS.md`](../SIGN_IN_ACCESS.md). | Dashboard setup pending. |
 | D3 | Calendar source | Read-only private iCal feed behind an adapter | Feed URLs are bearer secrets; store only as Worker secrets. |
 | D4 | On-device render or server PNG | On-device render from JSON, proven at H2 | Server PNG is the fallback if H2 fails. |
 | D5 | Weather, news and verse providers | Pending | Licensing and attribution must be checked first. |
