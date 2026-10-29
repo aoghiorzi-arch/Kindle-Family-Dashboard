@@ -74,4 +74,15 @@ Not started. See [`jailbreak-recovery-review.md`](jailbreak-recovery-review.md).
 
 ## Results log
 
-_No entries yet. Add dated entries only from the owner's observations._
+### 29 October 2026 — owner, from Mac Terminal (read-only)
+
+| Step | Result | Status |
+|---|---|---|
+| H0.1 Volume | Mounted as `Kindle`, MS-DOS FAT32, 3.2 GiB, 2.6 MiB used, 3.4 GB free | Done |
+| H0.2 Inventory | Only default content: `documents/` (Kindle User's Guide and its sidecar), `system/`, `audible/`, `music/`, `.active_content_sandbox/`. No `extensions`, `KUAL`, `MRPI`, `usbnet` or unexpected scripts. macOS wrote `.fseventsd/` on mount. `.Spotlight-V100` was not readable (no user content). Inventory kept on the Mac, not in the repo. | Done |
+| Firmware (`system/version.txt`) | `Kindle 5.3.7.3` (build shown in file). Matches the plan. | Done; confirm against the on-device menu in H0.5 |
+| H0.3 Backup | Waived by owner: device reported empty. Inventory consistent with that. | Waived |
+| H0.4 Eject | `diskutil eject` succeeded. Reconnect and remount not yet recorded. | Partly done |
+| H0.5 On-device checks | Clock, Wi-Fi after reboot, battery and charging, screen, registration | Not done |
+
+H0 is not complete. Remaining: reconnect check and the on-device menu checks in H0.5.
