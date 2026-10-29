@@ -63,7 +63,7 @@ Unplug, wait 10 seconds, replug. Confirm the volume mounts again and the file co
 
 | Gate | Status |
 |---|---|
-| H0 complete | **No** — awaiting owner results |
+| H0 complete | Yes, owner-reported (29 October 2026) |
 | Ready for H1 review | No |
 
 Attach results in a new section below, dated, with redactions. Do not paste raw inventories containing personal book titles or folder names.
@@ -82,7 +82,7 @@ Not started. See [`jailbreak-recovery-review.md`](jailbreak-recovery-review.md).
 | H0.2 Inventory | Only default content: `documents/` (Kindle User's Guide and its sidecar), `system/`, `audible/`, `music/`, `.active_content_sandbox/`. No `extensions`, `KUAL`, `MRPI`, `usbnet` or unexpected scripts. macOS wrote `.fseventsd/` on mount. `.Spotlight-V100` was not readable (no user content). Inventory kept on the Mac, not in the repo. | Done |
 | Firmware (`system/version.txt`) | `Kindle 5.3.7.3` (build shown in file). Matches the plan. | Done; confirm against the on-device menu in H0.5 |
 | H0.3 Backup | Waived by owner: device reported empty. Inventory consistent with that. | Waived |
-| H0.4 Eject | `diskutil eject` succeeded. Reconnect and remount not yet recorded. | Partly done |
-| H0.5 On-device checks | Clock, Wi-Fi after reboot, battery and charging, screen, registration | Not done |
+| H0.4 Eject | `diskutil eject` succeeded. Owner reports the reconnect step as satisfactory. | Done (owner-reported) |
+| H0.5 On-device checks | Owner reports all checks satisfactory. Individual values (clock, Wi-Fi after reboot, battery, screen, registration) were not supplied and are not recorded here. | Done (owner-reported, values not recorded) |
 
-H0 is not complete. Remaining: reconnect check and the on-device menu checks in H0.5.
+H0 complete on the owner's report. Per-item values, especially battery and casing observations, are not in this log; if they are needed for the H1 gate, the owner should add them.
