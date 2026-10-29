@@ -13,7 +13,7 @@ test("health is public and reveals no household data", async () => {
   const { env } = setup();
   const res = await handle(request("/api/health"), env);
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { ok: true });
+  assert.deepEqual(await res.json(), { ok: true, signIn: "development" });
 });
 
 test("shopping requires a session", async () => {
@@ -23,8 +23,9 @@ test("shopping requires a session", async () => {
   assert.equal((await res.json() as { error: { code: string } }).error.code, "unauthenticated");
 });
 
-test("dev sign-in is refused outside the local environment", async () => {
+test("production reports sign-in as unavailable and refuses the dev route", async () => {
   const { env } = setup("production");
+  assert.deepEqual(await (await handle(request("/api/health"), env)).json(), { ok: true, signIn: "unavailable" });
   const res = await handle(request("/api/dev/login", { method: "POST", body: { memberId: "a1" } }), env);
   assert.equal(res.status, 404);
   assert.equal(res.headers.get("Set-Cookie"), null);

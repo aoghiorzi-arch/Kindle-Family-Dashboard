@@ -10,7 +10,12 @@ type Route = {
 };
 
 const ROUTES: Route[] = [
-  { method: "GET", pattern: /^\/api\/health$/, run: async () => json({ ok: true }) },
+  {
+    method: "GET",
+    pattern: /^\/api\/health$/,
+    // Configuration only: says whether browser sign-in is available, never any household data.
+    run: async (_req, env) => json({ ok: true, signIn: env.ENVIRONMENT === "local" ? "development" : "unavailable" }),
+  },
   { method: "GET", pattern: /^\/api\/me$/, run: (req, env, now) => h.me(req, env, now) },
   { method: "POST", pattern: /^\/api\/dev\/login$/, run: (req, env, now) => h.devLogin(req, env, now) },
   { method: "POST", pattern: /^\/api\/logout$/, run: (req, env, now) => h.logout(req, env, now) },
@@ -27,6 +32,8 @@ const ROUTES: Route[] = [
     run: (req, env, now, url, [id]) => h.deleteItem(req, env, now, id, url),
   },
   { method: "GET", pattern: /^\/api\/device\/snapshot$/, run: (req, env, now) => h.deviceSnapshot(req, env, now) },
+  { method: "GET", pattern: /^\/api\/snapshot\/preview$/, run: (req, env, now) => h.snapshotPreview(req, env, now) },
+  { method: "GET", pattern: /^\/api\/admin\/devices$/, run: (req, env, now) => h.listDevices(req, env, now) },
   { method: "POST", pattern: /^\/api\/admin\/devices$/, run: (req, env, now) => h.createDevice(req, env, now) },
   {
     method: "POST",

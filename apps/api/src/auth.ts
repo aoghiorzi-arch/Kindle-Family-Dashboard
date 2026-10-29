@@ -9,6 +9,7 @@ export const CSRF_HEADER = "X-CSRF-Token";
 
 export interface MemberSession {
   memberId: string;
+  displayName: string;
   householdId: string;
   role: "admin" | "member";
   csrfToken: string;
@@ -33,15 +34,23 @@ export async function requireSession(request: Request, env: Env, now: Date): Pro
   const raw = cookieValue(request, SESSION_COOKIE);
   if (!raw) throw new HttpError(401, "unauthenticated", "Sign in required");
   const row = await env.DB.prepare(
-    `SELECT s.csrf_token, s.expires_at, m.id AS member_id, m.household_id, m.role
+    `SELECT s.csrf_token, s.expires_at, m.id AS member_id, m.display_name, m.household_id, m.role
        FROM sessions s JOIN members m ON m.id = s.member_id
       WHERE s.token_hash = ?`,
   )
     .bind(await sha256Hex(raw))
-    .first<{ csrf_token: string; expires_at: string; member_id: string; household_id: string; role: "admin" | "member" }>();
+    .first<{
+      csrf_token: string;
+      expires_at: string;
+      member_id: string;
+      display_name: string;
+      household_id: string;
+      role: "admin" | "member";
+    }>();
   if (!row || row.expires_at <= now.toISOString()) throw new HttpError(401, "unauthenticated", "Sign in required");
   return {
     memberId: row.member_id,
+    displayName: row.display_name,
     householdId: row.household_id,
     role: row.role,
     csrfToken: row.csrf_token,

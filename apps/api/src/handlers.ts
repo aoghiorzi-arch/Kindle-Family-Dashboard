@@ -55,6 +55,7 @@ export async function me(request: Request, env: Env, now: Date): Promise<Respons
   const session = await requireSession(request, env, now);
   return json({
     memberId: session.memberId,
+    displayName: session.displayName,
     householdId: session.householdId,
     role: session.role,
     csrfToken: session.csrfToken,
@@ -196,18 +197,21 @@ export async function deleteItem(request: Request, env: Env, now: Date, rawId: s
 
 // ---- Device snapshot -------------------------------------------------------
 
-export async function deviceSnapshot(request: Request, env: Env, now: Date): Promise<Response> {
-  const device = await requireDevice(request, env, ["snapshot:read"]);
+// The same snapshot the Kindle receives, built for the household behind a credential.
+async function householdSnapshot(env: Env, householdId: string, now: Date): Promise<Record<string, unknown>> {
   const household = await env.DB.prepare("SELECT timezone FROM households WHERE id = ?")
-    .bind(device.householdId)
+    .bind(householdId)
     .first<{ timezone: string }>();
-  if (!household) throw new HttpError(401, "unauthenticated", "Valid credential required");
+  if (!household) throw new HttpError(404, "not_found", "Household not found");
   const { results } = await env.DB.prepare(
     "SELECT title FROM shopping_items WHERE household_id = ? AND done = 0 ORDER BY position, created_at",
   )
-    .bind(device.householdId)
+    .bind(householdId)
     .all<{ title: string }>();
-  const snapshot = await buildSnapshot({ now, timezone: household.timezone, unchecked: results });
+  return buildSnapshot({ now, timezone: household.timezone, unchecked: results });
+}
+
+function snapshotResponse(request: Request, snapshot: Record<string, unknown>): Response {
   const etag = `"${snapshot.revision as string}"`;
   if (request.headers.get("If-None-Match") === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "no-store" } });
@@ -215,7 +219,38 @@ export async function deviceSnapshot(request: Request, env: Env, now: Date): Pro
   return json(snapshot, 200, { ETag: etag });
 }
 
+export async function deviceSnapshot(request: Request, env: Env, now: Date): Promise<Response> {
+  const device = await requireDevice(request, env, ["snapshot:read"]);
+  return snapshotResponse(request, await householdSnapshot(env, device.householdId, now));
+}
+
+// What the Kindle would show right now, for the phone's Home preview.
+export async function snapshotPreview(request: Request, env: Env, now: Date): Promise<Response> {
+  const session = await requireSession(request, env, now);
+  return json(await householdSnapshot(env, session.householdId, now));
+}
+
 // ---- Admin: device credentials ---------------------------------------------
+
+export async function listDevices(request: Request, env: Env, now: Date): Promise<Response> {
+  const session = await requireSession(request, env, now);
+  if (session.role !== "admin") throw new HttpError(403, "forbidden", "Admin access required");
+  const { results } = await env.DB.prepare(
+    `SELECT id, name, kind, created_at, revoked_at FROM devices
+      WHERE household_id = ? ORDER BY created_at`,
+  )
+    .bind(session.householdId)
+    .all<{ id: string; name: string; kind: string; created_at: string; revoked_at: string | null }>();
+  return json({
+    devices: results.map((d) => ({
+      id: d.id,
+      name: d.name,
+      kind: d.kind,
+      createdAt: d.created_at,
+      active: d.revoked_at === null,
+    })),
+  });
+}
 
 const KIND_SCOPE = { display: "snapshot:read", shortcut: "shopping:add" } as const;
 

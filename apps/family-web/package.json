@@ -1,0 +1,12 @@
+{
+  "name": "@kfd/family-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Family Hub phone editor (static, served by the Worker). Browser tests need a running local Worker.",
+  "scripts": {
+    "test:e2e": "node e2e/run.mjs"
+  },
+  "devDependencies": {
+    "axe-core": "^4.10.2"
+  }
+}

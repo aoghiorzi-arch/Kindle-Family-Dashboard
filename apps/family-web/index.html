@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Family Hub">
+  <title>Family Hub</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="top">
+    <h1 class="brand">Family Hub</h1>
+    <p id="who" class="who" aria-live="polite"></p>
+  </header>
+  <main id="main" tabindex="-1">
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <div id="view"></div>
+  </main>
+  <nav class="tabs" id="tabs" aria-label="Main" hidden>
+    <a href="#/home" data-tab="home">Home</a>
+    <a href="#/shopping" data-tab="shopping">Shopping</a>
+    <a href="#/calendar" data-tab="calendar">Calendar</a>
+    <a href="#/settings" data-tab="settings">Settings</a>
+  </nav>
+</body>
+</html>

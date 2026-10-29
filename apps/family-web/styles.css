@@ -1,0 +1,126 @@
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --text: #1b1b1b;
+  --muted: #55524b;
+  --line: #d6d2c8;
+  --accent: #1f5f8b;
+  --accent-text: #ffffff;
+  --danger: #9a2b1e;
+  --focus: #0b57d0;
+  --radius: 12px;
+  font-family: -apple-system, system-ui, "Helvetica Neue", Arial, sans-serif;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161514;
+    --surface: #221f1d;
+    --text: #f2efe9;
+    --muted: #b9b4aa;
+    --line: #3b3834;
+    --accent: #8cc4ef;
+    --accent-text: #0c1a24;
+    --danger: #ffaca0;
+    --focus: #9ccfff;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #161514;
+  --surface: #221f1d;
+  --text: #f2efe9;
+  --muted: #b9b4aa;
+  --line: #3b3834;
+  --accent: #8cc4ef;
+  --accent-text: #0c1a24;
+  --danger: #ffaca0;
+  --focus: #9ccfff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.skip-link {
+  position: absolute; left: 16px; top: -100px;
+  background: var(--surface); color: var(--text); padding: 12px 16px; border-radius: 8px; z-index: 10;
+}
+.skip-link:focus { top: 12px; }
+
+.top { padding: 20px 16px 8px; max-width: 640px; margin: 0 auto; }
+.brand { font-size: 1.6rem; margin: 0; font-weight: 700; }
+.who { margin: 2px 0 0; color: var(--muted); font-size: 0.95rem; min-height: 1.2em; }
+
+main { padding: 8px 16px 24px; max-width: 640px; margin: 0 auto; outline: none; }
+h2 { font-size: 1.3rem; margin: 20px 0 8px; }
+h3 { font-size: 1.1rem; margin: 16px 0 6px; }
+p { margin: 8px 0; }
+.muted { color: var(--muted); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; margin: 12px 0;
+}
+
+.status { min-height: 1.4em; margin: 4px 0; font-weight: 600; }
+.status.error { color: var(--danger); }
+
+button, .button, input, select {
+  font: inherit; min-height: 44px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); padding: 8px 14px;
+}
+button, .button { cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+button.danger { color: var(--danger); }
+button:disabled { opacity: 0.6; cursor: wait; }
+input[type="text"], input[type="password"], select { width: 100%; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.grow { flex: 1 1 200px; }
+
+form.stack { display: grid; gap: 10px; }
+label { display: block; font-weight: 600; margin-bottom: 4px; }
+
+ul.list { list-style: none; padding: 0; margin: 0; }
+ul.list > li {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px; margin: 8px 0; display: grid; gap: 8px;
+}
+.item-title { font-size: 1.05rem; }
+.item-title.done { text-decoration: line-through; color: var(--muted); }
+.check { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.check input { width: 26px; height: 26px; accent-color: var(--accent); }
+.badge { font-size: 0.85rem; color: var(--muted); }
+
+.stale { border-left: 4px solid var(--danger); padding-left: 12px; }
+
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+}
+.tabs a {
+  min-height: 52px; display: flex; align-items: center; justify-content: center; text-align: center;
+  color: var(--muted); text-decoration: none; font-size: 0.95rem; border-radius: 10px;
+}
+.tabs a[aria-current="page"] { color: var(--text); font-weight: 700; background: var(--bg); }
+
+.code {
+  font-family: ui-monospace, Menlo, monospace; word-break: break-all;
+  background: var(--bg); border: 1px dashed var(--line); padding: 10px; border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

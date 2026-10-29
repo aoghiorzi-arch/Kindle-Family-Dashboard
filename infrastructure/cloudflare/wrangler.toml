@@ -12,3 +12,9 @@ migrations_dir = "migrations"
 [vars]
 # Set in the production dashboard or via `wrangler secret`, never committed.
 # Local development values come from infrastructure/cloudflare/.dev.vars (git-ignored).
+
+# The family editor is static. Serving it from the same Worker keeps it on one origin with the API,
+# which the cookie and CSRF rules depend on. Requests under /api always reach the Worker.
+[assets]
+directory = "../../apps/family-web"
+binding = "ASSETS"
