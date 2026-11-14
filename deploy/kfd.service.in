@@ -1,0 +1,28 @@
+# systemd unit for the Family Hub on Ubuntu Server. Install with the sed command in docs/UBUNTU_SERVER.md.
+# @USER@ and @DIR@ are replaced with the account and repository path. UNVERIFIED on the target machine.
+[Unit]
+Description=Kindle Family Display - Family Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@DIR@
+Environment=KFD_DB=@DIR@/data/family.sqlite3
+EnvironmentFile=-@DIR@/data/kfd.env
+ExecStart=@DIR@/.venv/bin/python -m app.server
+Restart=on-failure
+RestartSec=5
+# The app only needs to write inside data/ (database, key, frames).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@DIR@/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

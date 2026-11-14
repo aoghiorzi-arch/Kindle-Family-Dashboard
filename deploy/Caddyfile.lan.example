@@ -1,0 +1,15 @@
+# Home-network TLS proxy for the Dell server. Replace 192.168.1.139 with the server's reserved address.
+# Caddy listens ONLY on that LAN address (not on IPv6 or other interfaces) and forwards to the app on 127.0.0.1:8765.
+# `tls internal` signs with Caddy's own local CA; phones and the Kindle must trust that CA (docs/UBUNTU_SERVER.md).
+# UNVERIFIED on the target machine.
+{
+	auto_https disable_redirects
+}
+
+https://192.168.1.139:8443 {
+	bind 192.168.1.139
+	tls internal
+	@outside not remote_ip private_ranges
+	respond @outside 403
+	reverse_proxy 127.0.0.1:8765
+}
