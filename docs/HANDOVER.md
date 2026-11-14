@@ -13,6 +13,32 @@ Handover version 1. **Tested commit:** run `git rev-parse HEAD` in your checkout
 
 State of play: **ready for supervised Kindle connection — not "Kindle ready".**
 
+## Device and decision record (added 2026-11-14)
+
+Confirmed by the user from the device (no serial or MAC recorded here):
+
+| Item | Value |
+|---|---|
+| Model label | D01200 (matches the plan's 600×800 Kindle Touch assumption) |
+| Firmware | 5.3.7.3 |
+| Network | Wi-Fi only |
+| Registration | Unregistered (not linked to an Amazon account) |
+| Free space | about 3.2 GB |
+| Not yet known | prior modification, battery/casing condition, whether it shows Special Offers (ads) |
+
+Server: the user's older laptop is the intended permanent server (Ubuntu Server planned; the user's other laptop and a Mac are alternatives). The Windows laptop path is not supported by `scripts/kfd`.
+
+**Decision (user, 2026-11-14): Option 1 — jailbreak the Kindle and run a small client on it that fetches the picture from the Family Hub server.** Not chosen: VNC kiosk (needs another machine, poor e-ink behaviour), custom-screensaver module (sleep screen only, ad-free models only), Samsung tablet (kept as a possible later second display). The Kindle stays display-only: no edit rights, no taps for now.
+
+Desk research summary, **unverified on this device**. MobileRead and several blogs could not be read in the cloud session, so the Stage B session must read them directly:
+- Community sources describe 5.3.7.3 as the last firmware for this hardware and the standard K5 jailbreak route (documented for 5.0.0–5.4.4.2) as covering it; a newer universal jailbreak thread reportedly covers firmware before 5.8.8. Check the MobileRead *Kindle Touch Hacking* wiki page and the current jailbreak thread for the exact package, steps and warnings.
+- Typical follow-on tools: KUAL launcher, USBNetwork + SSH (set a root password; default is blank), then a fetch-and-display script using `eips`. Reference design: github.com/pascalw/kindle-dash (tested on Kindle 4 NT, not the Touch). github.com/bishopdynamics/kindle-touch-kiosk confirms the D01200 on 5.3.7.3 can be jailbroken and run custom software.
+- No jailbreak-free way to set custom images was found.
+- Recovery: one forum user reported recovering a stuck Touch with a tool called Kubrick. Not confirmed. A documented, tested recovery path, plus a USB copy of the device contents, must exist **before** the user approves any modification.
+- Built-in `curl`/`wget` are reportedly unreliable for modern HTTPS; kindle-dash ships its own client. Whether it runs on the Touch and can trust our certificate authority is the open Stage B question (`NETWORK_PILOT.md`).
+
+Stage B order: (1) confirm hardware condition and read the current guides; (2) user-approved read-only USB identification; (3) backup copy and recovery plan, then explicit approval of the specific jailbreak step; (4) prove an image on screen from our server over a working secure transport; (5) phone edit appears on the next poll; (6) failure and power tests.
+
 ## Setup on the user's computer
 1. `scripts/kfd setup`; `app.manage add-user …`; `set-location …`; `scripts/kfd start`; `scripts/kfd smoke` (expect every line `PASS`). Backup: `python3 -m app.manage backup NEW_DIR` and keep the key (`KFD_KEY_FILE`) elsewhere; see `BACKUP_RESTORE.md`. A restore revokes all tokens: issue a new display token afterwards.
 2. Issue a display token (admin → Tokens → Display). Save it to a 0600 file on the computer; it is shown once.
