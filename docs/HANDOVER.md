@@ -26,7 +26,7 @@ Confirmed by the user from the device (no serial or MAC recorded here):
 | Free space | about 3.2 GB |
 | Not yet known | prior modification, battery/casing condition, whether it shows Special Offers (ads) |
 
-Server: Dell Inspiron 3558 (i5-5200U, 3.9 GB RAM), Ubuntu Server 26.04.1 LTS, fixed LAN address 192.168.1.139, reached over SSH. `scripts/kfd setup` and `smoke` passed there on 2026-11-14 (all 7 checks). Always-on setup, proxy and firewall: `UBUNTU_SERVER.md` (unverified on the machine). The Windows laptop path is not supported by `scripts/kfd`.
+Server: Dell Inspiron 3558 (i5-5200U, 3.9 GB RAM), Ubuntu Server 26.04.1 LTS, fixed LAN address 192.168.1.139, reached over SSH. `scripts/kfd setup` and `smoke` passed there on 2026-11-14 (all 7 checks). Always-on setup, proxy and firewall: `UBUNTU_SERVER.md`. Verified on the Dell on 2026-11-14: `kfd` service and Caddy (2.6.2, `tls internal`, bound to 192.168.1.139:8443) running, and `scripts/lan-check.sh` passed all 7 checks. Not yet done: firewall (ufw inactive; optional, the machine also runs an unrelated Docker project whose published ports ufw does not govern), CA trust on phone/Mac, Kindle TLS trust. A typo in `data/kfd.env` (`KFD_PUBLIC_ORIGIN`) caused 421 errors until fixed: copy that block as one paste. The Windows laptop path is not supported by `scripts/kfd`.
 
 **Decision (user, 2026-11-14): Option 1 — jailbreak the Kindle and run a small client on it that fetches the picture from the Family Hub server.** Not chosen: VNC kiosk (needs another machine, poor e-ink behaviour), custom-screensaver module (sleep screen only, ad-free models only), Samsung tablet (kept as a possible later second display). The Kindle stays display-only: no edit rights, no taps for now.
 
